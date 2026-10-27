@@ -1,0 +1,15 @@
+{
+  "name": "Berta — ARCH7E3F Mission Control",
+  "short_name": "Berta",
+  "description": "Voice, mission control, approvals, and sandbox monitoring for ARCH7E3F.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#050810",
+  "theme_color": "#050810",
+  "icons": [
+    { "src": "/icons/berta-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/berta-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

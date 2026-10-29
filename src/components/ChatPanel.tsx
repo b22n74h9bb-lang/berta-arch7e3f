@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, LoaderCircle, Mic, ScreenShare, Square, X } from "lucide-react";
+import { ArrowUp, ExternalLink, ImagePlus, LoaderCircle, Mic, ScreenShare, Square, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/providers/trpc";
 import type { ChatMessage } from "@/types/berta";
 import { BertaMark } from "./BertaMark";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 
-const suggestions = ["Inventory mission data", "Plan the first dataset review", "Explain current boundaries"];
+const suggestions = [
+  { label: "Inventory mission data", action: "send" },
+  { label: "Plan the first dataset review", action: "send" },
+  { label: "Create an image", action: "image" },
+] as const;
+
+type ImageResult = { jobId: number; key: string; url: string; sizeBytes: number };
 
 export function ChatPanel({ messages, voiceReplies }: { messages: ChatMessage[]; voiceReplies: boolean }) {
   const [input, setInput] = useState("");
@@ -14,11 +20,16 @@ export function ChatPanel({ messages, voiceReplies }: { messages: ChatMessage[];
   const [voiceSupported, setVoiceSupported] = useState(true);
   const [screenOpen, setScreenOpen] = useState(false);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
+  const [imageOpen, setImageOpen] = useState(false);
+  const [imagePrompt, setImagePrompt] = useState("");
+  const [imageSize, setImageSize] = useState<"1024x1024" | "1024x1536" | "1536x1024">("1024x1024");
+  const [imageResult, setImageResult] = useState<ImageResult | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const sendRef = useRef<(content: string) => void>(() => undefined);
   const scrollRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const utils = trpc.useUtils();
+
   const sendChat = trpc.berta.sendChat.useMutation({
     onSuccess: ({ reply }) => {
       void utils.berta.bootstrap.invalidate();
@@ -31,6 +42,19 @@ export function ChatPanel({ messages, voiceReplies }: { messages: ChatMessage[];
     },
     onError: (error) => toast.error(error.message),
   });
+
+  const generateImage = trpc.berta.generateImage.useMutation({
+    onSuccess: (result) => {
+      setImageResult(result);
+      void utils.berta.bootstrap.invalidate();
+      toast.success("Image created and saved to mission media.");
+    },
+    onError: (error) => {
+      void utils.berta.bootstrap.invalidate();
+      toast.error(error.message);
+    },
+  });
+
   const sendMessage = (raw: string) => {
     const content = raw.trim();
     if (!content || sendChat.isPending) return;
@@ -38,6 +62,25 @@ export function ChatPanel({ messages, voiceReplies }: { messages: ChatMessage[];
     sendChat.mutate({ content });
   };
   sendRef.current = sendMessage;
+
+  const openImageDialog = () => {
+    setImageResult(null);
+    setImageOpen(true);
+  };
+
+  const runSuggestion = (suggestion: (typeof suggestions)[number]) => {
+    if (suggestion.action === "image") {
+      openImageDialog();
+      return;
+    }
+    sendMessage(suggestion.label);
+  };
+
+  const submitImage = () => {
+    const prompt = imagePrompt.trim();
+    if (prompt.length < 3 || generateImage.isPending) return;
+    generateImage.mutate({ prompt, size: imageSize });
+  };
 
   useEffect(() => {
     const Recognition = window.SpeechRecognition ?? window.webkitSpeechRecognition;
@@ -68,6 +111,7 @@ export function ChatPanel({ messages, voiceReplies }: { messages: ChatMessage[];
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, sendChat.isPending]);
+
   useEffect(() => {
     if (videoRef.current && screenStream) videoRef.current.srcObject = screenStream;
   }, [screenStream, screenOpen]);
@@ -77,6 +121,7 @@ export function ChatPanel({ messages, voiceReplies }: { messages: ChatMessage[];
     setScreenStream(null);
     setScreenOpen(false);
   };
+
   const startScreen = async () => {
     if (!navigator.mediaDevices?.getDisplayMedia) {
       toast.error("Screen capture is not supported in this browser. On iPhone, support depends on the iOS version and browser.");
@@ -91,6 +136,7 @@ export function ChatPanel({ messages, voiceReplies }: { messages: ChatMessage[];
       if (error instanceof Error && error.name !== "NotAllowedError") toast.error("Screen capture could not start.");
     }
   };
+
   const toggleListening = () => {
     if (!voiceSupported || !recognitionRef.current) {
       toast.error("Voice recognition is unavailable here. Type your message, or open the app in a supported browser.");
@@ -139,22 +185,35 @@ export function ChatPanel({ messages, voiceReplies }: { messages: ChatMessage[];
         </div>
         <div className="suggestion-row" aria-label="Suggested prompts">
           {suggestions.map((suggestion) => (
-            <button key={suggestion} type="button" onClick={() => sendMessage(suggestion)} disabled={sendChat.isPending}>
-              {suggestion}
+            <button
+              key={suggestion.label}
+              type="button"
+              onClick={() => runSuggestion(suggestion)}
+              disabled={suggestion.action === "send" && sendChat.isPending}
+            >
+              {suggestion.action === "image" && <ImagePlus size={13} aria-hidden="true" />}
+              {suggestion.label}
             </button>
           ))}
         </div>
       </div>
+
       <div className="chat-shell">
         <div className="chat-header">
           <div>
             <span className="micro-label">MISSION CHANNEL</span>
             <p>ARCH7E3F · encrypted account session</p>
           </div>
-          <button type="button" className="icon-button" onClick={startScreen} aria-label="Preview a shared screen" title="Local screen preview">
-            <ScreenShare size={18} />
-          </button>
+          <div className="chat-header__actions">
+            <button type="button" className="icon-button" onClick={openImageDialog} aria-label="Create an image" title="Create an image">
+              <ImagePlus size={18} />
+            </button>
+            <button type="button" className="icon-button" onClick={startScreen} aria-label="Preview a shared screen" title="Local screen preview">
+              <ScreenShare size={18} />
+            </button>
+          </div>
         </div>
+
         <div className="message-list" ref={scrollRef} aria-live="polite">
           {messages.filter((message) => message.role !== "system").map((message) => (
             <article key={message.id} className={`message ${message.role === "user" ? "message--user" : "message--berta"}`}>
@@ -169,6 +228,7 @@ export function ChatPanel({ messages, voiceReplies }: { messages: ChatMessage[];
             </div>
           )}
         </div>
+
         <form
           className="chat-composer"
           onSubmit={(event) => {
@@ -197,6 +257,116 @@ export function ChatPanel({ messages, voiceReplies }: { messages: ChatMessage[];
         </form>
         <p className="composer-note">Enter to send · Shift + Enter for a new line · AI calls use the site owner’s quota</p>
       </div>
+
+      <Dialog
+        open={imageOpen}
+        onOpenChange={(open) => {
+          setImageOpen(open);
+          if (!open && generateImage.isPending) {
+            toast.info("Generation continues in the background. The result will appear here and in the Sandbox.");
+          }
+        }}
+      >
+        <DialogContent className="image-dialog">
+          <DialogHeader>
+            <DialogTitle>Create an image</DialogTitle>
+            <DialogDescription>
+              One direct request to the image gateway. Each attempt uses the site owner’s quota and is never retried automatically.
+            </DialogDescription>
+          </DialogHeader>
+
+          {imageResult ? (
+            <div className="image-result">
+              <img src={imageResult.url} alt={imagePrompt || "Generated image"} className="image-result__preview" />
+              <div className="image-result__meta">
+                <span>{(imageResult.sizeBytes / 1024).toFixed(0)} KB · job #{imageResult.jobId}</span>
+                <a href={imageResult.url} target="_blank" rel="noreferrer" className="image-result__link">
+                  <ExternalLink size={14} /> Open full size
+                </a>
+              </div>
+              <div className="image-result__actions">
+                <button
+                  type="button"
+                  className="button button--secondary"
+                  onClick={() => {
+                    setImageResult(null);
+                    setImagePrompt("");
+                  }}
+                >
+                  New image
+                </button>
+                <button type="button" className="button button--primary" onClick={() => setImageOpen(false)}>
+                  Done
+                </button>
+              </div>
+            </div>
+          ) : (
+            <form
+              className="image-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                submitImage();
+              }}
+            >
+              <div className="field field--wide">
+                <label htmlFor="image-prompt">Describe the image</label>
+                <textarea
+                  id="image-prompt"
+                  value={imagePrompt}
+                  onChange={(event) => setImagePrompt(event.target.value)}
+                  placeholder="e.g. A clean schematic of the human CRISPR atlas pipeline, dark background"
+                  rows={3}
+                  maxLength={1200}
+                  disabled={generateImage.isPending}
+                />
+              </div>
+              <div className="field field--wide">
+                <span className="field__label" id="image-size-label">Canvas</span>
+                <div className="size-choices" role="radiogroup" aria-labelledby="image-size-label">
+                  {([
+                    ["1024x1024", "Square"],
+                    ["1536x1024", "Landscape"],
+                    ["1024x1536", "Portrait"],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      role="radio"
+                      aria-checked={imageSize === value}
+                      className={`size-choice ${imageSize === value ? "is-active" : ""}`}
+                      onClick={() => setImageSize(value)}
+                      disabled={generateImage.isPending}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button
+                type="submit"
+                className="button button--primary image-submit"
+                disabled={imagePrompt.trim().length < 3 || generateImage.isPending}
+              >
+                {generateImage.isPending ? (
+                  <>
+                    <LoaderCircle size={17} className="spin" /> Generating…
+                  </>
+                ) : (
+                  <>
+                    <ImagePlus size={17} /> Generate image
+                  </>
+                )}
+              </button>
+              {generateImage.isPending && (
+                <p className="image-pending-note">
+                  This can take up to a minute. Closing this window does not cancel the request—the result is saved to mission media either way.
+                </p>
+              )}
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={screenOpen} onOpenChange={(open) => (open ? setScreenOpen(true) : stopScreen())}>
         <DialogContent className="screen-dialog">
           <DialogHeader>

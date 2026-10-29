@@ -1,16 +1,42 @@
 import { useState } from "react";
-import { Ban, Check, Clock3, Container, Pause, Play, Plus, ShieldCheck, X } from "lucide-react";
+import { Ban, Check, Clock3, Container, ExternalLink, Pause, Play, Plus, ShieldCheck, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/providers/trpc";
-import type { BertaData } from "@/types/berta";
+import type { BertaData, SandboxJob } from "@/types/berta";
 
 type JobKind = "dataset-manifest" | "analysis-plan" | "reproducibility-check";
-const jobLabels: Record<JobKind, string> = {
+
+const jobLabels: Record<JobKind | "image-generation", string> = {
   "dataset-manifest": "Dataset manifest",
   "analysis-plan": "Analysis plan",
   "reproducibility-check": "Reproducibility check",
+  "image-generation": "Image generation",
 };
+
 const jobKindLabel = (kind: string) => jobLabels[kind as JobKind] ?? kind;
+
+// The queue form only offers executor-bound work types; image jobs are created from the console dialog.
+const queueableKinds: JobKind[] = ["dataset-manifest", "analysis-plan", "reproducibility-check"];
+
+function JobMediaPreview({ job }: { job: SandboxJob }) {
+  const mediaUrl = trpc.berta.jobMediaUrl.useQuery(
+    { id: job.id },
+    { enabled: job.kind === "image-generation" && job.status === "completed" && !!job.output?.startsWith("storage:") },
+  );
+
+  if (!mediaUrl.data?.url) return null;
+  return (
+    <figure className="job-media">
+      <img src={mediaUrl.data.url} alt={job.name} loading="lazy" />
+      <figcaption>
+        <span>Stored in mission media</span>
+        <a href={mediaUrl.data.url} target="_blank" rel="noreferrer">
+          <ExternalLink size={13} /> Full size
+        </a>
+      </figcaption>
+    </figure>
+  );
+}
 
 export function SandboxPanel({ data }: { data: BertaData }) {
   const [name, setName] = useState("");
@@ -18,6 +44,7 @@ export function SandboxPanel({ data }: { data: BertaData }) {
   const [budgetCredits, setBudgetCredits] = useState(1);
   const utils = trpc.useUtils();
   const refresh = () => void utils.berta.bootstrap.invalidate();
+
   const createJob = trpc.berta.createJob.useMutation({
     onSuccess: () => {
       setName("");
@@ -26,10 +53,7 @@ export function SandboxPanel({ data }: { data: BertaData }) {
     },
     onError: (error) => toast.error(error.message),
   });
-  const updateJob = trpc.berta.updateJob.useMutation({
-    onSuccess: refresh,
-    onError: (error) => toast.error(error.message),
-  });
+  const updateJob = trpc.berta.updateJob.useMutation({ onSuccess: refresh, onError: (error) => toast.error(error.message) });
   const resolveApproval = trpc.berta.resolveApproval.useMutation({
     onSuccess: () => {
       refresh();
@@ -37,7 +61,9 @@ export function SandboxPanel({ data }: { data: BertaData }) {
     },
     onError: (error) => toast.error(error.message),
   });
+
   const pendingApprovals = data.approvals.filter((approval) => approval.status === "pending");
+
   return (
     <div className="page-stack">
       <header className="page-heading">
@@ -48,6 +74,7 @@ export function SandboxPanel({ data }: { data: BertaData }) {
         </div>
         <div className="connection-chip"><Container size={17} /> EXECUTOR OFFLINE</div>
       </header>
+
       <section className="executor-notice">
         <ShieldCheck size={23} />
         <div>
@@ -55,9 +82,13 @@ export function SandboxPanel({ data }: { data: BertaData }) {
           <p>Jobs below are real persisted queue records—not running computations. Connect an isolated runtime before expecting execution or output files.</p>
         </div>
       </section>
+
       <section className="data-section">
         <div className="section-heading">
-          <div><span className="micro-label">NEW BOUNDED JOB</span><h2>Queue mission work</h2></div>
+          <div>
+            <span className="micro-label">NEW BOUNDED JOB</span>
+            <h2>Queue mission work</h2>
+          </div>
         </div>
         <form
           className="job-form"
@@ -73,7 +104,7 @@ export function SandboxPanel({ data }: { data: BertaData }) {
           <div className="field">
             <label htmlFor="job-kind">Work type</label>
             <select id="job-kind" value={kind} onChange={(event) => setKind(event.target.value as JobKind)}>
-              {Object.entries(jobLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              {queueableKinds.map((value) => <option key={value} value={value}>{jobLabels[value]}</option>)}
             </select>
           </div>
           <div className="field field--budget">
@@ -85,9 +116,13 @@ export function SandboxPanel({ data }: { data: BertaData }) {
           </button>
         </form>
       </section>
+
       <section className="data-section">
         <div className="section-heading">
-          <div><span className="micro-label">JOB REGISTER</span><h2>Execution queue</h2></div>
+          <div>
+            <span className="micro-label">JOB REGISTER</span>
+            <h2>Execution queue</h2>
+          </div>
           <span className="quiet-meta">{data.jobs.length} RECORDS</span>
         </div>
         {data.jobs.length === 0 ? (
@@ -103,7 +138,11 @@ export function SandboxPanel({ data }: { data: BertaData }) {
                   </div>
                   <span className={`job-status job-status--${job.status}`}>{job.status}</span>
                 </div>
-                <p>{job.output}</p>
+                {job.kind === "image-generation" && job.output?.startsWith("storage:") ? (
+                  <JobMediaPreview job={job} />
+                ) : (
+                  <p>{job.output}</p>
+                )}
                 <div className="job-row__footer">
                   <span>{job.executor} · {job.progress}%</span>
                   <div className="job-actions">
@@ -123,9 +162,13 @@ export function SandboxPanel({ data }: { data: BertaData }) {
           </div>
         )}
       </section>
+
       <section className="data-section">
         <div className="section-heading">
-          <div><span className="micro-label">HUMAN-IN-THE-LOOP</span><h2>Approval register</h2></div>
+          <div>
+            <span className="micro-label">HUMAN-IN-THE-LOOP</span>
+            <h2>Approval register</h2>
+          </div>
           <span className="quiet-meta">{pendingApprovals.length} PENDING</span>
         </div>
         <div className="approval-list">

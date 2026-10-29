@@ -9,6 +9,7 @@ An installable, mobile-first mission-control PWA for Berta: authenticated AI cha
 - MySQL persistence through Drizzle ORM
 - Kimi OAuth and JWT account sessions
 - Server-side AI calls with runtime model selection and typed error handling
+- Direct image creation from the console: one-tap dialog → gateway generation → object storage, with the result previewed immediately and archived as a sandbox job record
 - Voice input and spoken replies where the browser supports them
 - Local screen preview; frames are not sent to Berta
 - Mission objectives, tasks, Rabbit-mode settings, and credit planning limits
@@ -21,6 +22,8 @@ The sandbox does **not** pretend to execute code. Jobs are persisted as queue re
 
 AI and mission data require a network connection. The mission credit budget is a planning control; it does not change actual subscription or gateway quota.
 
+Image generation calls the agent gateway's `generate_image` tool from the server, downloads the result, and uploads it to platform object storage. Only the storage key is persisted (`sandboxJobs.output = "storage:<key>"`); short-lived presigned URLs are minted at render time. Every generation attempt and stored byte consumes the site owner's quota, and a failed attempt is never retried automatically — the failure is written to the job record and chat log instead.
+
 ARCH7E3F keeps molecular CRISPR evidence separate from aggregate public-reaction analysis. It excludes mouse-derived core data, human experimentation, individual targeting, de-anonymization, manipulation, and causal claims linking molecular findings to complex social behavior.
 
 ## Requirements
@@ -28,7 +31,8 @@ ARCH7E3F keeps molecular CRISPR evidence separate from aggregate public-reaction
 - Node.js 22+
 - MySQL-compatible database
 - Kimi OAuth application credentials
-- Kimi agent gateway credentials for AI chat
+- Kimi agent gateway credentials for AI chat and image generation
+- Platform object storage resource (`KIMI_STORAGE_RESOURCE_ID`) for generated media
 
 Copy the environment template and fill in your own values:
 
@@ -75,7 +79,7 @@ docker run --env-file .env -p 3000:3000 berta-arch7e3f
 ## Project map
 
 - `src/` — mobile-first React interface
-- `api/` — Hono/tRPC backend, authentication, AI provider, and queries
+- `api/` — Hono/tRPC backend, authentication, AI provider, media generation, and queries
 - `db/` — Drizzle schema and seed scaffold
 - `contracts/` — shared types and constants
 - `public/` — manifest, service worker, and generated icon destinations

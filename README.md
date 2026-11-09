@@ -2,6 +2,9 @@
 
 An installable, mobile-first mission-control PWA for Berta: authenticated AI chat, voice interaction, persistent ARCH7E3F mission state, explicit approvals, and sandbox-job tracking.
 
+- **Purpose / rules:** [`MISSION.md`](./MISSION.md)
+- **Deploy + webhook handover (names only):** [`HANDOVER.md`](./HANDOVER.md)
+
 ## What is implemented
 
 - React 19 + TypeScript + Vite + Tailwind CSS frontend

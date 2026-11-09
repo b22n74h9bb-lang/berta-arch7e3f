@@ -149,32 +149,60 @@ Slack Incoming Webhooks expect a JSON body like `{ "text": "…" }` (or Block Ki
 
 ---
 
-## 5. Known issues / gaps (verified)
+## 5. Bandwagon / `bertapp.life` cutover pack
+
+Ready-to-run files for the VPS (no secrets):
+
+| Path | Purpose |
+|------|---------|
+| `deploy/BANDWAGON.md` | Ordered cutover checklist + live probe diagnosis |
+| `deploy/docker-compose.yml` | MySQL + app on `127.0.0.1:3000` |
+| `deploy/Caddyfile` | Automatic HTTPS → `:3000` |
+| `deploy/nginx.app.conf.example` | nginx + certbot alternative |
+| `scripts/probe-bertapp.sh` | External green/red probe |
+| `GET /api/health` | JSON health for proxy / Docker HEALTHCHECK |
+
+```bash
+bash scripts/probe-bertapp.sh app.bertapp.life
+```
+
+### Live probe (2026-11-09 ~14:12 Asia/Shanghai)
+
+| Check | Result |
+|-------|--------|
+| DNS | `172.96.18.215` (IT7 / Bandwagon LA) |
+| `:80` | `502 Bad Gateway` (`Server: Pingora`) — proxy up, upstream missing |
+| `:443` | TCP open, TLS EOF, **no certificate** |
+| `:3000` | closed publicly (correct once bound to loopback **and** proxied) |
+
+## 6. Known issues / gaps (verified)
 
 | Item | Status |
 |------|--------|
-| Live URL TLS (2026-11-09 probe) | `app.bertapp.life` DNS → `172.96.18.215`; TLS handshake failed from Cursor probe; `:3000` connection refused — treat HTTPS cutover as **in progress / broken until re-verified** |
+| Live URL TLS / upstream | See §5 — not green until proxy→app + cert |
 | GitHub Copilot in Slack | Returns "isn't authorized to use that resource" — org/account link, not app code |
 | Sandbox executor | Not connected by design |
 | Chat read-only task state | Post-deploy spec |
 | Shared assignment model | Post-deploy spec |
-| `MISSION.md` / this file | Added in handover docs PR so Berta can run solo |
+| `MISSION.md` / this file | Added so Berta can run solo |
 
 ---
 
-## 6. Coordination rules for operators
+## 7. Coordination rules for operators
 
 - Propose in Slack; Berta ratifies.
 - No secrets in Slack or git.
 - After each infra change: ping Berta with evidence (URL screenshot, webhook delivery id, sign-in proof).
 - Re-probe `https://app.bertapp.life` after DNS/SSL/app restart before claiming green.
 
-## 7. Quick file map
+## 8. Quick file map
 
 - `MISSION.md` — purpose / layers / rules
 - `README.md` — developer overview
+- `HANDOVER.md` — this runbook
+- `deploy/` — Bandwagon compose, Caddy, nginx, cutover checklist
 - `.env.example` — env names
-- `Dockerfile` — Node 22 Alpine → `:3000`
-- `api/` — Hono/tRPC, OAuth callback at `/api/oauth/callback`
+- `Dockerfile` — Node 22 Alpine → `:3000` (accepts `VITE_*` build args)
+- `api/` — Hono/tRPC, OAuth callback at `/api/oauth/callback`, `/api/health`
 - `src/` — PWA UI
 - `db/` — Drizzle schema

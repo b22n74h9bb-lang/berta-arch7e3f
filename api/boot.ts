@@ -36,6 +36,13 @@ app.use("*", async (c, next) => {
 // Keep body limits route-scoped so bodyless requests work through the dev server.
 app.use("/api/trpc/*", bodyLimit({ maxSize: 50 * 1024 * 1024 }));
 app.get(Paths.oauthCallback, createOAuthCallbackHandler());
+app.get("/api/health", (c) =>
+  c.json({
+    ok: true,
+    service: "berta-arch7e3f",
+    time: new Date().toISOString(),
+  }),
+);
 app.use("/api/trpc/*", async (c) => {
   return fetchRequestHandler({ endpoint: "/api/trpc", req: c.req.raw, router: appRouter, createContext });
 });

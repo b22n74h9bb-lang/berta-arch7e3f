@@ -4,6 +4,7 @@ An installable, mobile-first mission-control PWA for Berta: authenticated AI cha
 
 - **Purpose / rules:** [`MISSION.md`](./MISSION.md)
 - **Deploy + webhook handover (names only):** [`HANDOVER.md`](./HANDOVER.md)
+- **Bandwagon cutover pack:** [`deploy/BANDWAGON.md`](./deploy/BANDWAGON.md)
 
 ## What is implemented
 

@@ -1,9 +1,11 @@
 FROM node:22-alpine AS build
 WORKDIR /app
-COPY package.json ./
+# npm 10 hits arborist peer-set crash (edgesOut) on this tree; pin npm 11 + lockfile.
+RUN npm install -g npm@11.6.2
+COPY package.json package-lock.json ./
 COPY scripts ./scripts
 COPY assets ./assets
-RUN npm install
+RUN npm ci
 COPY . .
 
 # Vite inlines these at build time — pass via --build-arg / compose.
@@ -17,6 +19,7 @@ RUN npm run build
 FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production
+RUN apk add --no-cache wget
 COPY package.json ./
 COPY --from=build /app/dist ./dist
 EXPOSE 3000

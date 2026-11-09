@@ -1,0 +1,14 @@
+# Automatic HTTPS for app.bertapp.life → local Node on :3000
+# Install Caddy on the VPS, then:
+#   sudo caddy run --config /path/to/this/Caddyfile
+# or install as a service with this file as the site config.
+
+app.bertapp.life {
+	encode gzip
+	reverse_proxy 127.0.0.1:3000
+}
+
+# Optional apex redirect
+bertapp.life {
+	redir https://app.bertapp.life{uri} permanent
+}

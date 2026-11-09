@@ -1,0 +1,59 @@
+# Bandwagon / VPS bring-up for app.bertapp.life
+# Usage (on the host, with a filled .env next to this file or at repo root):
+#   cp ../.env.example .env   # fill secrets on the host only
+#   docker compose -f deploy/docker-compose.yml --env-file .env up -d --build
+#
+# Then put Caddy or nginx in front of 127.0.0.1:3000 for HTTPS.
+# See deploy/BANDWAGON.md
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-berta}
+      MYSQL_USER: ${MYSQL_USER:-berta}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD}
+    volumes:
+      - berta_mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        VITE_KIMI_AUTH_URL: ${VITE_KIMI_AUTH_URL}
+        VITE_APP_ID: ${VITE_APP_ID}
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      APP_ID: ${APP_ID}
+      APP_SECRET: ${APP_SECRET}
+      DATABASE_URL: ${DATABASE_URL:-mysql://${MYSQL_USER:-berta}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-berta}}
+      KIMI_AUTH_URL: ${KIMI_AUTH_URL}
+      KIMI_OPEN_URL: ${KIMI_OPEN_URL}
+      OWNER_UNION_ID: ${OWNER_UNION_ID:-}
+      KIMI_AGENTGW_API_KEY: ${KIMI_AGENTGW_API_KEY}
+      KIMI_AGENTGW_BASE_URL: ${KIMI_AGENTGW_BASE_URL}
+      KIMI_STORAGE_RESOURCE_ID: ${KIMI_STORAGE_RESOURCE_ID}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 25s
+      retries: 5
+
+volumes:
+  berta_mysql:

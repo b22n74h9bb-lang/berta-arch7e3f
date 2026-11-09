@@ -1,0 +1,37 @@
+# Example nginx site for app.bertapp.life → 127.0.0.1:3000
+# Pair with certbot: sudo certbot --nginx -d app.bertapp.life -d bertapp.life
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name app.bertapp.life bertapp.life;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://app.bertapp.life$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name app.bertapp.life;
+
+    # ssl_certificate     /etc/letsencrypt/live/app.bertapp.life/fullchain.pem;
+    # ssl_certificate_key /etc/letsencrypt/live/app.bertapp.life/privkey.pem;
+
+    client_max_body_size 50m;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+    }
+}

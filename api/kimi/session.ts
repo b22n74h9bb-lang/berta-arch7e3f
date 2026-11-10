@@ -21,12 +21,19 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
   try {
     const secret = new TextEncoder().encode(env.appSecret);
     const { payload } = await jose.jwtVerify(token, secret, { algorithms: [JWT_ALG] });
-    const { unionId, clientId } = payload;
-    if (!unionId || !clientId) {
+    const { unionId, clientId, sessionGeneration } = payload;
+    if (typeof unionId !== "string" || typeof clientId !== "string" || !unionId || !clientId) {
       console.warn("[session] JWT payload missing required fields.");
       return null;
     }
-    return { unionId, clientId } as SessionPayload;
+    if (
+      sessionGeneration !== undefined &&
+      (typeof sessionGeneration !== "number" || !Number.isInteger(sessionGeneration) || sessionGeneration < 1)
+    ) {
+      console.warn("[session] JWT payload has an invalid session generation.");
+      return null;
+    }
+    return { unionId, clientId, sessionGeneration };
   } catch (error) {
     console.warn("[session] JWT verification failed:", error);
     return null;

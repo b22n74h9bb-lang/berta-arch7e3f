@@ -1,19 +1,21 @@
 import type { FetchCreateContextFnOptions } from "@trpc/server/adapters/fetch";
-import type { User } from "@db/schema";
-import { authenticateRequest } from "./kimi/auth";
+import { authenticateRequest, isStaleSessionError, type SessionUser } from "./kimi/auth";
+import { clearedSessionCookie } from "./lib/cookies";
 
 export type TrpcContext = {
   req: Request;
   resHeaders: Headers;
-  user?: User;
+  user?: SessionUser;
 };
 
 export async function createContext(opts: FetchCreateContextFnOptions): Promise<TrpcContext> {
   const ctx: TrpcContext = { req: opts.req, resHeaders: opts.resHeaders };
   try {
     ctx.user = await authenticateRequest(opts.req.headers);
-  } catch {
-    // Authentication is optional here
+  } catch (error) {
+    if (isStaleSessionError(error)) {
+      opts.resHeaders.append("set-cookie", clearedSessionCookie(opts.req.headers));
+    }
   }
   return ctx;
 }

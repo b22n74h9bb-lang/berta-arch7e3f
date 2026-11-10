@@ -4,6 +4,7 @@ import { LOGIN_PATH } from "@/const";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import type { BertaData } from "@/types/berta";
+import { AccessHold } from "@/components/AccessHold";
 import { BertaMark } from "@/components/BertaMark";
 import { ChatPanel } from "@/components/ChatPanel";
 import { MissionPanel } from "@/components/MissionPanel";
@@ -21,18 +22,32 @@ type View = (typeof views)[number]["id"];
 export default function Home() {
   const [view, setView] = useState<View>("console");
   const { user, isLoading: authLoading } = useAuth();
+  const approved = user?.membership.status === "approved";
   const query = trpc.berta.bootstrap.useQuery(undefined, {
-    enabled: Boolean(user),
+    enabled: Boolean(approved),
     retry: 1,
     refetchOnWindowFocus: false,
   });
+  const memberQueue = trpc.auth.listMembers.useQuery(undefined, {
+    enabled: Boolean(approved && user?.role === "admin"),
+    refetchInterval: 20000,
+    retry: false,
+  });
+  const accessRequests = memberQueue.data?.filter((member) => member.status === "pending").length ?? 0;
   const navigate = (next: View) => {
     setView(next);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   if (authLoading) return <LoadingShell label="AUTHENTICATING OPERATOR" />;
   if (!user) return <Welcome />;
+  if (user.membership.status !== "approved") {
+    const status = user.membership.status === "rejected" || user.membership.status === "revoked"
+      ? user.membership.status
+      : "pending";
+    return <AccessHold login={user.membership.login} status={status} />;
+  }
   if (query.isLoading) return <LoadingShell label="LOADING ARCH7E3F MISSION STATE" />;
+  if (query.isError && query.error.data?.code === "UNAUTHORIZED") return <Welcome />;
   if (query.isError || !query.data) {
     return (
       <div className="centered-state">
@@ -72,6 +87,7 @@ export default function Home() {
             <button key={id} type="button" className={view === id ? "is-active" : ""} onClick={() => navigate(id)}>
               <Icon size={19} /><span>{label}</span>
               {id === "sandbox" && pending > 0 && <b>{pending}</b>}
+              {id === "settings" && accessRequests > 0 && <b>{accessRequests}</b>}
             </button>
           ))}
         </nav>
@@ -101,7 +117,9 @@ export default function Home() {
         {views.map(({ id, label, icon: Icon }) => (
           <button key={id} type="button" className={view === id ? "is-active" : ""} onClick={() => navigate(id)}>
             <span className="mobile-nav__icon">
-              <Icon size={20} />{id === "sandbox" && pending > 0 && <b>{pending}</b>}
+              <Icon size={20} />
+              {id === "sandbox" && pending > 0 && <b>{pending}</b>}
+              {id === "settings" && accessRequests > 0 && <b>{accessRequests}</b>}
             </span>
             <span>{label}</span>
           </button>

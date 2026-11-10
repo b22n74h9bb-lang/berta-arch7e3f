@@ -13,9 +13,11 @@ export function useAuth(options?: UseAuthOptions) {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
   const { data: user, isLoading, error, refetch } = trpc.auth.me.useQuery(undefined, {
-    staleTime: 1000 * 60 * 5,
+    staleTime: 5000,
     retry: false,
+    refetchInterval: (query) => (query.state.data ? 5000 : false),
   });
+  const sessionDead = (error as { data?: { code?: string } } | null)?.data?.code === "UNAUTHORIZED";
   const logoutMutation = trpc.auth.logout.useMutation({
     onSuccess: async () => {
       await utils.invalidate();
@@ -33,13 +35,13 @@ export function useAuth(options?: UseAuthOptions) {
 
   return useMemo(
     () => ({
-      user: user ?? null,
-      isAuthenticated: !!user,
+      user: sessionDead ? null : user ?? null,
+      isAuthenticated: Boolean(user) && !sessionDead,
       isLoading: isLoading || logoutMutation.isPending,
       error,
       logout,
       refresh: refetch,
     }),
-    [user, isLoading, logoutMutation.isPending, error, logout, refetch],
+    [user, sessionDead, isLoading, logoutMutation.isPending, error, logout, refetch],
   );
 }

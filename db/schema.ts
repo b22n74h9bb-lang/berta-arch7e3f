@@ -3,6 +3,25 @@ import {
   uniqueIndex, varchar,
 } from "drizzle-orm/mysql-core";
 
+export const members = mysqlTable(
+  "members",
+  {
+    id: serial("id").primaryKey(),
+    githubId: varchar("githubId", { length: 32 }).notNull(),
+    login: varchar("login", { length: 255 }).notNull(),
+    status: mysqlEnum("status", ["pending", "approved", "rejected", "revoked"])
+      .notNull()
+      .default("pending"),
+    role: mysqlEnum("role", ["admin", "member"]).notNull().default("member"),
+    sessionGeneration: int("sessionGeneration").notNull().default(1),
+    userId: bigint("userId", { mode: "number", unsigned: true }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+    decidedAt: timestamp("decidedAt"),
+  },
+  (table) => ({ githubIdx: uniqueIndex("members_github_idx").on(table.githubId) }),
+);
+
 export const users = mysqlTable("users", {
   id: serial("id").primaryKey(),
   unionId: varchar("unionId", { length: 255 }).notNull().unique(),
@@ -101,6 +120,8 @@ export const chatMessages = mysqlTable(
   (table) => ({ userIdx: index("chat_messages_user_idx").on(table.userId) }),
 );
 
+export type Member = typeof members.$inferSelect;
+export type InsertMember = typeof members.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type Mission = typeof missions.$inferSelect;

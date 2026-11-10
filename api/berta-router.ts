@@ -3,7 +3,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { approvals, chatMessages, missions, sandboxJobs, tasks } from "@db/schema";
-import { createRouter, authedQuery } from "./middleware";
+import { createRouter, approvedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { ensureMission, getMissionState, ownedApproval, ownedJob, ownedTask } from "./queries/berta";
 import { kimiGw } from "./ai/provider";
@@ -66,9 +66,9 @@ function imageError(error: unknown): TRPCError {
 }
 
 export const bertaRouter = createRouter({
-  bootstrap: authedQuery.query(({ ctx }) => getMissionState(ctx.user.id)),
+  bootstrap: approvedQuery.query(({ ctx }) => getMissionState(ctx.user.id)),
 
-  updateMission: authedQuery
+  updateMission: approvedQuery
     .input(
       z.object({
         objective: z.string().min(20).max(8000).optional(),
@@ -84,7 +84,7 @@ export const bertaRouter = createRouter({
       return { ok: true };
     }),
 
-  saveConnection: authedQuery
+  saveConnection: approvedQuery
     .input(
       z.object({
         runtimeUrl: z
@@ -111,7 +111,7 @@ export const bertaRouter = createRouter({
       return { ok: true, status: runtimeUrl ? "unverified" : "unconfigured" };
     }),
 
-  addTask: authedQuery
+  addTask: approvedQuery
     .input(z.object({ title: z.string().trim().min(3).max(500) }))
     .mutation(async ({ ctx, input }) => {
       await ensureMission(ctx.user.id);
@@ -121,7 +121,7 @@ export const bertaRouter = createRouter({
       return { ok: true };
     }),
 
-  updateTask: authedQuery
+  updateTask: approvedQuery
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -140,7 +140,7 @@ export const bertaRouter = createRouter({
       return { ok: true };
     }),
 
-  generateImage: authedQuery
+  generateImage: approvedQuery
     .input(
       z.object({
         prompt: z.string().trim().min(3).max(1200),
@@ -201,7 +201,7 @@ export const bertaRouter = createRouter({
       }
     }),
 
-  jobMediaUrl: authedQuery
+  jobMediaUrl: approvedQuery
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ ctx, input }) => {
       const job = await ownedJob(ctx.user.id, input.id);
@@ -211,7 +211,7 @@ export const bertaRouter = createRouter({
       return { url: await getStoredImageUrl(job.output.slice("storage:".length)) };
     }),
 
-  createJob: authedQuery
+  createJob: approvedQuery
     .input(
       z.object({
         name: z.string().trim().min(3).max(255),
@@ -233,7 +233,7 @@ export const bertaRouter = createRouter({
       return { ok: true };
     }),
 
-  updateJob: authedQuery
+  updateJob: approvedQuery
     .input(z.object({ id: z.number().int().positive(), action: z.enum(["pause", "resume", "cancel"]) }))
     .mutation(async ({ ctx, input }) => {
       const job = await ownedJob(ctx.user.id, input.id);
@@ -250,7 +250,7 @@ export const bertaRouter = createRouter({
       return { ok: true };
     }),
 
-  resolveApproval: authedQuery
+  resolveApproval: approvedQuery
     .input(z.object({ id: z.number().int().positive(), decision: z.enum(["approved", "rejected"]) }))
     .mutation(async ({ ctx, input }) => {
       const approval = await ownedApproval(ctx.user.id, input.id);
@@ -265,7 +265,7 @@ export const bertaRouter = createRouter({
       return { ok: true };
     }),
 
-  sendChat: authedQuery
+  sendChat: approvedQuery
     .input(z.object({ content: z.string().trim().min(1).max(6000) }))
     .mutation(async ({ ctx, input }) => {
       await ensureMission(ctx.user.id);

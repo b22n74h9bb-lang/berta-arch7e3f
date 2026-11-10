@@ -6,7 +6,11 @@ export type TokenResponse = {
   scope: string;
 };
 
-export type SessionPayload = { unionId: string; clientId: string };
+export type SessionPayload = {
+  unionId: string;
+  clientId: string;
+  sessionGeneration?: number;
+};
 
 export type UserProfile = {
   user_id: string;

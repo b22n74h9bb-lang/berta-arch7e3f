@@ -42,7 +42,11 @@ Copy from `.env.example`. Fill on the **host only**.
 | `VITE_APP_ID` | frontend build | Must match OAuth app id |
 | `KIMI_AUTH_URL` | backend | Same family as Vite auth URL |
 | `KIMI_OPEN_URL` | backend | e.g. `https://open.kimi.com` |
-| `OWNER_UNION_ID` | backend | First-login admin |
+| `OWNER_UNION_ID` | backend | Kimi first-login admin |
+| `OWNER_GITHUB_ID` | backend | GitHub numeric id of the owner. This is not the team allowlist. |
+| `GITHUB_CLIENT_ID` | backend | GitHub OAuth app client id. Public in the authorize redirect. |
+| `GITHUB_CLIENT_SECRET` | backend | GitHub OAuth client secret. Server only. |
+| `GITHUB_OAUTH_REDIRECT_URL` | backend | Exact callback, `https://app.bertapp.life/api/oauth/callback` |
 | `KIMI_AGENTGW_API_KEY` | backend | Gateway chat/images — **not** OAuth login |
 | `KIMI_AGENTGW_BASE_URL` | backend | Include `/coding/v1` suffix |
 | `KIMI_STORAGE_RESOURCE_ID` | backend | Object storage resource id |
@@ -50,7 +54,11 @@ Copy from `.env.example`. Fill on the **host only**.
 **Verified distinction (Ariel, 2026-11-09):** gateway API key unlocks chat/images. It does **not** unlock "Sign in with Kimi". Login still needs OAuth (`APP_ID` / `APP_SECRET` / `VITE_APP_ID` + auth URLs).
 
 **OAuth redirect (code):** `${origin}/api/oauth/callback`  
-Register that exact redirect on the Kimi OAuth app for the production origin (e.g. `https://app.bertapp.life/api/oauth/callback`).
+Register that exact redirect on the Kimi OAuth app and on the GitHub OAuth app for the production origin (e.g. `https://app.bertapp.life/api/oauth/callback`).
+
+GitHub sign-in starts at `/api/oauth/github` with scopes `read:user` and `user:email`. Team access is a `members` row (`githubId`, `login`, `status`, `role`), not an env list. The owner is the only admin. Everyone else stays pending, with no mission data, until the owner approves them in Settings. Reject and revoke bump that member's session generation so the old cookie fails on the next request.
+
+Before the first boot of this change, apply the schema while the current app is still up (`npm run db:push` from a host checkout that has `DATABASE_URL`). The running server also creates `members` if that table is missing, so an existing owner session is not dropped when the new process starts. Then rebuild, because the pending screen is in the frontend. Do not put secret values in compose, Slack, or the PR.
 
 ---
 

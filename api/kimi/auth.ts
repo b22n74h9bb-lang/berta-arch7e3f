@@ -8,8 +8,25 @@ import { Session } from "@contracts/constants";
 import { Errors } from "@contracts/errors";
 import { signSessionToken, verifySessionToken } from "./session";
 import { users as kimiUsers } from "./platform";
-import { findUserByUnionId, upsertUser } from "../queries/users";
+import { findUserByUnionId, setUserRole, upsertUser } from "../queries/users";
+import { ensureMemberForUser } from "../queries/members";
+import { githubIdFromUnion, isOwnerGithubId, sessionAccess } from "../github/membership";
+import { handleGithubCallback } from "../github/auth";
 import type { TokenResponse } from "./types";
+import type { User } from "@db/schema";
+import type { MembershipView } from "../github/membership";
+
+export class StaleSessionError extends Error {
+  constructor() {
+    super("Session is no longer valid.");
+  }
+}
+
+export function isStaleSessionError(error: unknown): error is StaleSessionError {
+  return error instanceof StaleSessionError;
+}
+
+export type SessionUser = User & { membership?: MembershipView };
 
 async function exchangeAuthCode(code: string, redirectUri: string): Promise<TokenResponse> {
   const body = new URLSearchParams({
@@ -43,7 +60,7 @@ async function verifyAccessToken(accessToken: string): Promise<{ userId: string;
   return { userId, clientId };
 }
 
-export async function authenticateRequest(headers: Headers) {
+export async function authenticateRequest(headers: Headers): Promise<SessionUser> {
   const cookies = cookie.parse(headers.get("cookie") || "");
   const token = cookies[Session.cookieName];
   if (!token) {
@@ -54,13 +71,38 @@ export async function authenticateRequest(headers: Headers) {
   if (!claim) throw Errors.forbidden("Invalid authentication token.");
   const user = await findUserByUnionId(claim.unionId);
   if (!user) throw Errors.forbidden("User not found. Please re-login.");
-  return user;
+  const githubId = githubIdFromUnion(claim.unionId);
+  if (!githubId) return user;
+  const member = await ensureMemberForUser({
+    githubId,
+    loginHint: user.name ?? "",
+    userId: user.id,
+    ownerGithubId: env.ownerGithubId,
+  });
+  if (sessionAccess({ tokenGeneration: claim.sessionGeneration, member }) === "stale") {
+    throw new StaleSessionError();
+  }
+  const owner = isOwnerGithubId(githubId, env.ownerGithubId);
+  const role = owner ? "admin" : "user";
+  if (user.role !== role) await setUserRole(user.id, role);
+  return {
+    ...user,
+    role,
+    membership: {
+      status: member.status,
+      role: member.role,
+      login: member.login,
+      githubId: member.githubId,
+      sessionGeneration: member.sessionGeneration,
+    },
+  };
 }
 
 export function createOAuthCallbackHandler() {
   return async (c: Context) => {
-    const code = c.req.query("code");
     const state = c.req.query("state");
+    if (state?.startsWith("gh:")) return handleGithubCallback(c);
+    const code = c.req.query("code");
     const error = c.req.query("error");
     const errorDescription = c.req.query("error_description");
     if (error) {

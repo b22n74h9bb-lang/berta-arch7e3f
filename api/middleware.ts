@@ -41,4 +41,17 @@ function requireRole(role: string) {
 }
 
 export const authedQuery = t.procedure.use(requireAuth);
-export const adminQuery = authedQuery.use(requireRole("admin"));
+
+const requireApproved = t.middleware(async (opts) => {
+  const { ctx, next } = opts;
+  if (!ctx.user) {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: ErrorMessages.unauthenticated });
+  }
+  if (ctx.user.membership && ctx.user.membership.status !== "approved") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Access is not approved yet." });
+  }
+  return next({ ctx: { ...ctx, user: ctx.user } });
+});
+
+export const approvedQuery = authedQuery.use(requireApproved);
+export const adminQuery = approvedQuery.use(requireRole("admin"));

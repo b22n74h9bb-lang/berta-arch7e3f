@@ -402,3 +402,9 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+.member-list { display: grid; }
+.member-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; border-top: 1px solid var(--surface-border); }
+.member-row h3 { margin: 0; font-size: 15px; }
+.member-status { display: block; margin-top: 4px; color: var(--text-tertiary); font: 600 10px/1.4 "JetBrains Mono", monospace; letter-spacing: .08em; text-transform: uppercase; }
+.member-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }

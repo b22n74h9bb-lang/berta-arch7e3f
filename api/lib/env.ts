@@ -14,4 +14,8 @@ export const env = {
   kimiAuthUrl: required("KIMI_AUTH_URL"),
   kimiOpenUrl: required("KIMI_OPEN_URL"),
   ownerUnionId: process.env.OWNER_UNION_ID ?? "",
+  githubClientId: (process.env.GITHUB_CLIENT_ID ?? "").trim(),
+  githubClientSecret: (process.env.GITHUB_CLIENT_SECRET ?? "").trim(),
+  githubOAuthRedirectUrl: (process.env.GITHUB_OAUTH_REDIRECT_URL ?? "").trim(),
+  ownerGithubId: (process.env.OWNER_GITHUB_ID ?? "").trim(),
 };

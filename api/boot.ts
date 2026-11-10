@@ -6,6 +6,7 @@ import { appRouter } from "./router";
 import { createContext } from "./context";
 import { env } from "./lib/env";
 import { createOAuthCallbackHandler } from "./kimi/auth";
+import { createGithubAuthorizeHandler } from "./github/auth";
 import { Paths } from "@contracts/constants";
 import { log } from "./lib/logger";
 import { handleClientLog } from "./lib/clientlog";
@@ -35,6 +36,7 @@ app.use("*", async (c, next) => {
 
 // Keep body limits route-scoped so bodyless requests work through the dev server.
 app.use("/api/trpc/*", bodyLimit({ maxSize: 50 * 1024 * 1024 }));
+app.get(Paths.githubAuthorize, createGithubAuthorizeHandler());
 app.get(Paths.oauthCallback, createOAuthCallbackHandler());
 app.get("/api/health", (c) =>
   c.json({

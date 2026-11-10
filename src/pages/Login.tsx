@@ -22,11 +22,16 @@ export default function Login() {
         <CardHeader className="text-center">
           <CardTitle>Welcome</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="grid gap-3">
           <Button className="w-full" size="lg" onClick={() => {
             window.location.href = getOAuthUrl();
           }}>
             Sign in with Kimi
+          </Button>
+          <Button className="w-full" size="lg" variant="outline" onClick={() => {
+            window.location.href = "/api/oauth/github";
+          }}>
+            Sign in with GitHub
           </Button>
         </CardContent>
       </Card>

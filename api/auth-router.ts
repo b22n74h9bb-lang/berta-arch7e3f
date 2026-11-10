@@ -6,32 +6,21 @@ import { adminQuery, authedQuery, createRouter } from "./middleware";
 import type { SessionUser } from "./kimi/auth";
 import { applyMemberDecision, findMemberByGithubId, listMembers } from "./queries/members";
 import { setUserRole } from "./queries/users";
-import { reviewDecision, type MembershipView } from "./github/membership";
+import { presentedMembership, reviewDecision } from "./github/membership";
 
-function membershipOf(user: SessionUser): Omit<MembershipView, "sessionGeneration"> {
-  if (user.membership) {
-    return {
-      status: user.membership.status,
-      role: user.membership.role,
-      login: user.membership.login,
-      githubId: user.membership.githubId,
-    };
-  }
+function presentUser(user: SessionUser) {
   return {
-    status: "approved",
-    role: user.role === "admin" ? "admin" : "member",
-    login: user.name ?? "",
-    githubId: "",
+    ...user,
+    verifiedOwner: user.verifiedOwner === true,
+    membership: presentedMembership({
+      membership: user.membership,
+      fallbackLogin: user.name ?? "",
+    }),
   };
 }
 
-function presentUser(user: SessionUser) {
-  return { ...user, membership: membershipOf(user) };
-}
-
 function assertOwner(user: SessionUser) {
-  if (!env.ownerGithubId) return;
-  if (user.membership?.githubId !== env.ownerGithubId || user.membership.role !== "admin") {
+  if (!user.verifiedOwner) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Only the owner can review members." });
   }
 }

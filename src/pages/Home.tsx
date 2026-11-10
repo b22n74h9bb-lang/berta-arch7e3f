@@ -22,7 +22,7 @@ type View = (typeof views)[number]["id"];
 export default function Home() {
   const [view, setView] = useState<View>("console");
   const { user, isLoading: authLoading } = useAuth();
-  const approved = user?.membership.status === "approved";
+  const approved = Boolean(user && (user.verifiedOwner || user.membership.status === "approved"));
   const query = trpc.berta.bootstrap.useQuery(undefined, {
     enabled: Boolean(approved),
     retry: 1,
@@ -40,7 +40,7 @@ export default function Home() {
   };
   if (authLoading) return <LoadingShell label="AUTHENTICATING OPERATOR" />;
   if (!user) return <Welcome />;
-  if (user.membership.status !== "approved") {
+  if (!user.verifiedOwner && user.membership.status !== "approved") {
     const status = user.membership.status === "rejected" || user.membership.status === "revoked"
       ? user.membership.status
       : "pending";

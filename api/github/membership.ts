@@ -30,26 +30,56 @@ export function isOwnerGithubId(githubId: string, ownerGithubId: string): boolea
   return ownerGithubId.length > 0 && githubId === ownerGithubId;
 }
 
-export function membershipForSignIn(input: {
-  githubId: string;
+export function isVerifiedOwner(input: {
+  unionId: string;
+  ownerUnionId: string;
+  githubId: string | null;
   ownerGithubId: string;
-  existing: MemberSnapshot | null;
-}): MemberSnapshot {
-  if (isOwnerGithubId(input.githubId, input.ownerGithubId)) {
+}): boolean {
+  if (input.ownerUnionId.length > 0 && input.unionId === input.ownerUnionId) return true;
+  return input.githubId !== null && isOwnerGithubId(input.githubId, input.ownerGithubId);
+}
+
+/** First sign-in only. Existing status and role are never rewritten here. */
+export const NEW_MEMBER_SNAPSHOT: MemberSnapshot = {
+  status: "pending",
+  role: "member",
+  sessionGeneration: 1,
+};
+
+export function signInIdentityPatch(input: { login: string; userId: number }): {
+  login: string;
+  userId: number;
+} {
+  return { login: input.login, userId: input.userId };
+}
+
+export function mayAccessProtectedData(input: {
+  verifiedOwner: boolean;
+  membership: { status: MemberStatus } | null | undefined;
+}): boolean {
+  if (input.verifiedOwner) return true;
+  return input.membership?.status === "approved";
+}
+
+export function presentedMembership(input: {
+  membership: MembershipView | null | undefined;
+  fallbackLogin: string;
+}): Omit<MembershipView, "sessionGeneration"> {
+  if (input.membership) {
     return {
-      status: "approved",
-      role: "admin",
-      sessionGeneration: input.existing?.sessionGeneration ?? 1,
+      status: input.membership.status,
+      role: input.membership.role,
+      login: input.membership.login,
+      githubId: input.membership.githubId,
     };
   }
-  if (input.existing) {
-    return {
-      status: input.existing.status,
-      role: "member",
-      sessionGeneration: input.existing.sessionGeneration,
-    };
-  }
-  return { status: "pending", role: "member", sessionGeneration: 1 };
+  return {
+    status: "pending",
+    role: "member",
+    login: input.fallbackLogin,
+    githubId: "",
+  };
 }
 
 export type SessionAccess = "approved" | "pending" | "denied" | "stale";

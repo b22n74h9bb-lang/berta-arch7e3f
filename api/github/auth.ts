@@ -7,8 +7,8 @@ import { getSessionCookieOptions } from "../lib/cookies";
 import { Session } from "@contracts/constants";
 import { signSessionToken } from "../kimi/session";
 import { findUserByUnionId, setUserRole, upsertUser } from "../queries/users";
-import { upsertMemberForSignIn } from "../queries/members";
-import { githubUnionId, isOwnerGithubId, oauthStatesMatch } from "./membership";
+import { touchMemberIdentity } from "../queries/members";
+import { githubUnionId, isVerifiedOwner, oauthStatesMatch } from "./membership";
 
 const STATE_COOKIE = "gh_oauth_state";
 const GITHUB_SCOPE = "read:user user:email";
@@ -153,7 +153,12 @@ export async function handleGithubCallback(c: Context) {
     const { profile, email } = await fetchProfile(accessToken);
     const githubId = String(profile.id);
     const unionId = githubUnionId(githubId);
-    const owner = isOwnerGithubId(githubId, env.ownerGithubId);
+    const owner = isVerifiedOwner({
+      unionId,
+      ownerUnionId: env.ownerUnionId,
+      githubId,
+      ownerGithubId: env.ownerGithubId,
+    });
     await upsertUser({
       unionId,
       name: (profile.name || profile.login).slice(0, 255),
@@ -167,11 +172,10 @@ export async function handleGithubCallback(c: Context) {
     if (user.role !== (owner ? "admin" : "user")) {
       await setUserRole(user.id, owner ? "admin" : "user");
     }
-    const member = await upsertMemberForSignIn({
+    const member = await touchMemberIdentity({
       githubId,
       login: profile.login,
       userId: user.id,
-      ownerGithubId: env.ownerGithubId,
     });
     const token = await signSessionToken({
       unionId,

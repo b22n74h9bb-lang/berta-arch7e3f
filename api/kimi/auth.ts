@@ -9,8 +9,8 @@ import { Errors } from "@contracts/errors";
 import { signSessionToken, verifySessionToken } from "./session";
 import { users as kimiUsers } from "./platform";
 import { findUserByUnionId, setUserRole, upsertUser } from "../queries/users";
-import { ensureMemberForUser } from "../queries/members";
-import { githubIdFromUnion, isOwnerGithubId, sessionAccess } from "../github/membership";
+import { touchMemberIdentity } from "../queries/members";
+import { githubIdFromUnion, isVerifiedOwner, sessionAccess } from "../github/membership";
 import { handleGithubCallback } from "../github/auth";
 import type { TokenResponse } from "./types";
 import type { User } from "@db/schema";
@@ -26,7 +26,10 @@ export function isStaleSessionError(error: unknown): error is StaleSessionError 
   return error instanceof StaleSessionError;
 }
 
-export type SessionUser = User & { membership?: MembershipView };
+export type SessionUser = User & {
+  membership?: MembershipView;
+  verifiedOwner: boolean;
+};
 
 async function exchangeAuthCode(code: string, redirectUri: string): Promise<TokenResponse> {
   const body = new URLSearchParams({
@@ -72,22 +75,27 @@ export async function authenticateRequest(headers: Headers): Promise<SessionUser
   const user = await findUserByUnionId(claim.unionId);
   if (!user) throw Errors.forbidden("User not found. Please re-login.");
   const githubId = githubIdFromUnion(claim.unionId);
-  if (!githubId) return user;
-  const member = await ensureMemberForUser({
+  const verifiedOwner = isVerifiedOwner({
+    unionId: claim.unionId,
+    ownerUnionId: env.ownerUnionId,
     githubId,
-    loginHint: user.name ?? "",
-    userId: user.id,
     ownerGithubId: env.ownerGithubId,
+  });
+  const role = verifiedOwner ? "admin" : "user";
+  if (user.role !== role) await setUserRole(user.id, role);
+  if (!githubId) return { ...user, role, verifiedOwner };
+  const member = await touchMemberIdentity({
+    githubId,
+    login: user.name ?? "",
+    userId: user.id,
   });
   if (sessionAccess({ tokenGeneration: claim.sessionGeneration, member }) === "stale") {
     throw new StaleSessionError();
   }
-  const owner = isOwnerGithubId(githubId, env.ownerGithubId);
-  const role = owner ? "admin" : "user";
-  if (user.role !== role) await setUserRole(user.id, role);
   return {
     ...user,
     role,
+    verifiedOwner,
     membership: {
       status: member.status,
       role: member.role,

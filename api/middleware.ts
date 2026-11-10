@@ -2,6 +2,7 @@ import { ErrorMessages } from "@contracts/constants";
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import type { TrpcContext } from "./context";
+import { mayAccessProtectedData } from "./github/membership";
 import { log } from "./lib/logger";
 
 const t = initTRPC.context<TrpcContext>().create({
@@ -47,7 +48,7 @@ const requireApproved = t.middleware(async (opts) => {
   if (!ctx.user) {
     throw new TRPCError({ code: "UNAUTHORIZED", message: ErrorMessages.unauthenticated });
   }
-  if (ctx.user.membership && ctx.user.membership.status !== "approved") {
+  if (!mayAccessProtectedData({ verifiedOwner: ctx.user.verifiedOwner, membership: ctx.user.membership })) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Access is not approved yet." });
   }
   return next({ ctx: { ...ctx, user: ctx.user } });

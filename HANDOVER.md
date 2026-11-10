@@ -58,6 +58,10 @@ Register that exact redirect on the Kimi OAuth app and on the GitHub OAuth app f
 
 GitHub sign-in starts at `/api/oauth/github` with scopes `read:user` and `user:email`. Team access is a `members` row (`githubId`, `login`, `status`, `role`), not an env list. The owner is the only admin. Everyone else stays pending, with no mission data, until the owner approves them in Settings. Reject and revoke bump that member's session generation so the old cookie fails on the next request.
 
+Sign-in and profile refresh write `login` and `userId` only. They never write `status` or `role`. A missing membership row fails closed: protected APIs deny the request. The only exception is a verified owner, matched at request time against `OWNER_GITHUB_ID` or `OWNER_UNION_ID`. `me` returns the stored status, or `pending` when no row exists. It does not invent `approved`.
+
+Kimi sign-in has no approval flow of its own yet. A Kimi session can read mission data only when its union id equals `OWNER_UNION_ID`. Any other Kimi session stays pending and gets no mission, chat, or sandbox data. Approval does not share one person's tasks with another; data queries stay scoped to that user id.
+
 Before the first boot of this change, apply the schema while the current app is still up (`npm run db:push` from a host checkout that has `DATABASE_URL`). The running server also creates `members` if that table is missing, so an existing owner session is not dropped when the new process starts. Then rebuild, because the pending screen is in the frontend. Do not put secret values in compose, Slack, or the PR.
 
 ---

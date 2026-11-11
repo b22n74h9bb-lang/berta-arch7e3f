@@ -16,6 +16,9 @@ on:
       - ".github/e2e-slack-notify.trigger"
   deployment_status:
   workflow_run:
+    # GitHub rejects this event when workflows is omitted (0-job failure).
+    # Point this at the CI workflow name once one exists on main.
+    workflows: ["CI"]
     types: [completed]
   workflow_dispatch:
     inputs:

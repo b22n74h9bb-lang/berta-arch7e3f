@@ -120,6 +120,90 @@ export const chatMessages = mysqlTable(
   (table) => ({ userIdx: index("chat_messages_user_idx").on(table.userId) }),
 );
 
+/** Append-only bridge ledger. Raw webhook bodies are not stored — only hashes and refs. */
+export const bridgeEvents = mysqlTable(
+  "bridge_events",
+  {
+    id: serial("id").primaryKey(),
+    source: mysqlEnum("source", ["github"]).notNull().default("github"),
+    type: varchar("type", { length: 120 }).notNull(),
+    deliveryId: varchar("deliveryId", { length: 120 }).notNull(),
+    payloadHash: varchar("payloadHash", { length: 64 }).notNull(),
+    actorLogin: varchar("actorLogin", { length: 255 }),
+    repo: varchar("repo", { length: 255 }),
+    ref: varchar("ref", { length: 255 }),
+    receivedAt: timestamp("receivedAt").defaultNow().notNull(),
+    lastSeenAt: timestamp("lastSeenAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    deliveryHashIdx: uniqueIndex("bridge_events_delivery_hash_idx").on(
+      table.deliveryId,
+      table.payloadHash,
+    ),
+    sourceTypeIdx: index("bridge_events_source_type_idx").on(table.source, table.type),
+  }),
+);
+
+export const missionRecords = mysqlTable(
+  "mission_records",
+  {
+    id: serial("id").primaryKey(),
+    kind: varchar("kind", { length: 80 }).notNull(),
+    summary: varchar("summary", { length: 500 }).notNull(),
+    actorLogin: varchar("actorLogin", { length: 255 }),
+    repo: varchar("repo", { length: 255 }),
+    ref: varchar("ref", { length: 255 }),
+    state: mysqlEnum("state", ["open", "in_review", "approved", "closed"])
+      .notNull()
+      .default("open"),
+    sourceEventId: bigint("sourceEventId", { mode: "number", unsigned: true }),
+    decidedBy: varchar("decidedBy", { length: 255 }),
+    decidedAt: timestamp("decidedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+  },
+  (table) => ({
+    stateIdx: index("mission_records_state_idx").on(table.state),
+    repoRefIdx: index("mission_records_repo_ref_idx").on(table.repo, table.ref),
+  }),
+);
+
+export const plugins = mysqlTable(
+  "plugins",
+  {
+    id: serial("id").primaryKey(),
+    name: varchar("name", { length: 120 }).notNull(),
+    version: varchar("version", { length: 64 }).notNull(),
+    scopes: text("scopes").notNull(),
+    status: mysqlEnum("status", ["pending", "approved", "revoked"])
+      .notNull()
+      .default("pending"),
+    tokenGeneration: int("tokenGeneration").notNull().default(1),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+    decidedAt: timestamp("decidedAt"),
+  },
+  (table) => ({
+    nameVersionIdx: uniqueIndex("plugins_name_version_idx").on(table.name, table.version),
+  }),
+);
+
+export const pluginTokens = mysqlTable(
+  "plugin_tokens",
+  {
+    id: serial("id").primaryKey(),
+    pluginId: bigint("pluginId", { mode: "number", unsigned: true }).notNull(),
+    tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+    generation: int("generation").notNull().default(1),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    revokedAt: timestamp("revokedAt"),
+  },
+  (table) => ({
+    tokenHashIdx: uniqueIndex("plugin_tokens_hash_idx").on(table.tokenHash),
+    pluginIdx: index("plugin_tokens_plugin_idx").on(table.pluginId),
+  }),
+);
+
 export type Member = typeof members.$inferSelect;
 export type InsertMember = typeof members.$inferInsert;
 export type User = typeof users.$inferSelect;
@@ -129,3 +213,7 @@ export type Task = typeof tasks.$inferSelect;
 export type SandboxJob = typeof sandboxJobs.$inferSelect;
 export type Approval = typeof approvals.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
+export type BridgeEvent = typeof bridgeEvents.$inferSelect;
+export type MissionRecord = typeof missionRecords.$inferSelect;
+export type Plugin = typeof plugins.$inferSelect;
+export type PluginToken = typeof pluginTokens.$inferSelect;

@@ -31,10 +31,14 @@ describe("github oauth routes", () => {
     expect(setCookie).not.toContain(clientSecret);
 
     const callback = await app.request("http://localhost/api/oauth/callback?code=abc&state=gh:does-not-match");
-    expect(callback.status).toBe(400);
+    expect(callback.status).toBe(302);
+    const redirect = callback.headers.get("location") ?? "";
+    expect(redirect).toBe("/login?oauth=invalid_state");
+    expect(redirect).not.toContain(clientSecret);
+    expect(redirect).not.toContain("abc");
     const body = await callback.text();
-    expect(body).toContain("invalid_oauth_state");
     expect(body).not.toContain(clientSecret);
     expect(body).not.toContain("abc");
   });
 });
+

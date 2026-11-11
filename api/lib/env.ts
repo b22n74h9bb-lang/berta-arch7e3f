@@ -18,4 +18,8 @@ export const env = {
   githubClientSecret: (process.env.GITHUB_CLIENT_SECRET ?? "").trim(),
   githubOAuthRedirectUrl: (process.env.GITHUB_OAUTH_REDIRECT_URL ?? "").trim(),
   ownerGithubId: (process.env.OWNER_GITHUB_ID ?? "").trim(),
+  /** GitHub webhook HMAC secret. Prefer reading live via githubWebhookSecret(). */
+  get githubWebhookSecret() {
+    return (process.env.GITHUB_WEBHOOK_SECRET ?? "").trim();
+  },
 };

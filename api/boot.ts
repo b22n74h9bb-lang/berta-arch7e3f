@@ -7,6 +7,7 @@ import { createContext } from "./context";
 import { env } from "./lib/env";
 import { createOAuthCallbackHandler } from "./kimi/auth";
 import { createGithubAuthorizeHandler } from "./github/auth";
+import { createGithubWebhookHandler } from "./bridge/github-webhook";
 import { Paths } from "@contracts/constants";
 import { log } from "./lib/logger";
 import { handleClientLog } from "./lib/clientlog";
@@ -38,6 +39,7 @@ app.use("*", async (c, next) => {
 app.use("/api/trpc/*", bodyLimit({ maxSize: 50 * 1024 * 1024 }));
 app.get(Paths.githubAuthorize, createGithubAuthorizeHandler());
 app.get(Paths.oauthCallback, createOAuthCallbackHandler());
+app.post(Paths.githubWebhook, bodyLimit({ maxSize: 1024 * 1024 }), createGithubWebhookHandler());
 app.get("/api/health", (c) =>
   c.json({
     ok: true,

@@ -47,6 +47,7 @@ Copy from `.env.example`. Fill on the **host only**.
 | `GITHUB_CLIENT_ID` | backend | GitHub OAuth app client id. Public in the authorize redirect. |
 | `GITHUB_CLIENT_SECRET` | backend | GitHub OAuth client secret. Server only. |
 | `GITHUB_OAUTH_REDIRECT_URL` | backend | Exact callback, `https://app.bertapp.life/api/oauth/callback` |
+| `GITHUB_WEBHOOK_SECRET` | backend | HMAC for `POST /api/webhooks/github`. Host/Environment only. Ingress fails closed when unset. |
 | `KIMI_AGENTGW_API_KEY` | backend | Gateway chat/images — **not** OAuth login |
 | `KIMI_AGENTGW_BASE_URL` | backend | Include `/coding/v1` suffix |
 | `KIMI_STORAGE_RESOURCE_ID` | backend | Object storage resource id |
@@ -191,11 +192,13 @@ bash scripts/probe-bertapp.sh app.bertapp.life
 
 | Item | Status |
 |------|--------|
-| Live URL TLS / upstream | See §5 — not green until proxy→app + cert |
+| Live URL TLS / upstream | Green as of 2026-11-11 (probe `https://app.bertapp.life/api/health` → ok). Historical §5 probe kept for cutover diagnosis. |
 | GitHub Copilot in Slack | Returns "isn't authorized to use that resource" — org/account link, not app code |
 | Sandbox executor | Not connected by design |
 | Chat read-only task state | Post-deploy spec |
 | Shared assignment model | Post-deploy spec |
+| Bridge webhook persistence | `POST /api/webhooks/github` verifies HMAC and fails closed without `GITHUB_WEBHOOK_SECRET`; event rows not written until owner-approved follow-up |
+| Hooks / Clawbot plugins | Schema scaffold only (`plugins`, `plugin_tokens`); no third-party activation without owner approval |
 | `MISSION.md` / this file | Added so Berta can run solo |
 
 ---

@@ -51,6 +51,12 @@ Copy from `.env.example`. Fill on the **host only**.
 | `KIMI_AGENTGW_API_KEY` | backend | Gateway chat/images — **not** OAuth login |
 | `KIMI_AGENTGW_BASE_URL` | backend | Include `/coding/v1` suffix |
 | `KIMI_STORAGE_RESOURCE_ID` | backend | Object storage resource id |
+| `WECHAT_ADAPTER` | backend | Leave unset. This build ignores it. A later build accepts only `enabled`. |
+| `PLUGIN_HOOKS_ENABLED` | backend | Leave unset. Outbound hook delivery is not shipped. |
+| `WECHAT_APP_ID` | backend | Official Account app id, or WeCom corp id. Host only. |
+| `WECHAT_APP_SECRET` | backend | WeChat or WeCom secret. Server only. |
+| `WECHAT_TOKEN` | backend | Callback signature token. Server only. |
+| `WECHAT_ENCODING_AES_KEY` | backend | Official encrypted-message key. Server only. |
 
 **Verified distinction (Ariel, 2026-11-09):** gateway API key unlocks chat/images. It does **not** unlock "Sign in with Kimi". Login still needs OAuth (`APP_ID` / `APP_SECRET` / `VITE_APP_ID` + auth URLs).
 
@@ -198,7 +204,7 @@ bash scripts/probe-bertapp.sh app.bertapp.life
 | Chat read-only task state | Post-deploy spec |
 | Shared assignment model | Post-deploy spec |
 | Bridge webhook persistence | `POST /api/webhooks/github` verifies HMAC and fails closed without `GITHUB_WEBHOOK_SECRET`; event rows not written until owner-approved follow-up |
-| Hooks / Clawbot plugins | Schema scaffold only (`plugins`, `plugin_tokens`); no third-party activation without owner approval |
+| Hooks / Claw plugins | Owner registration and approval are in Settings. Default deny. Token hashes only; no route accepts the token. Hook dispatch and `/api/wechat/callback` stay disabled (`wechat_disabled`). See `docs/claw-plugins.md` and `docs/wechat-integration.md`. |
 | `MISSION.md` / this file | Added so Berta can run solo |
 
 ---
@@ -221,3 +227,5 @@ bash scripts/probe-bertapp.sh app.bertapp.life
 - `api/` — Hono/tRPC, OAuth callback at `/api/oauth/callback`, `/api/health`
 - `src/` — PWA UI
 - `db/` — Drizzle schema
+- `docs/claw-plugins.md` — plugin contract, approval, sandbox, hooks
+- `docs/wechat-integration.md` — WeChat phases, secret names, rollback

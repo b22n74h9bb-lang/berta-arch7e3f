@@ -1,13 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { PLUGIN_ACTIONS, type PluginAction } from "@contracts/plugins";
 
-export const PLUGIN_ACTIONS = [
-  "mission.create",
-  "task.assign",
-  "comment.add",
-  "approval.request",
-] as const;
-
-export type PluginAction = (typeof PLUGIN_ACTIONS)[number];
+export { PLUGIN_ACTIONS, type PluginAction };
 
 /** Default deny. Only explicitly listed actions pass. No wildcards. */
 export function pluginAllowsAction(input: {

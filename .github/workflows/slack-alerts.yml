@@ -2,17 +2,21 @@
 # Inactive until GitHub Environment "slack" has secret SLACK_WEBHOOK_URL.
 # Do not put secret values in this file.
 #
-# Labeled e2e (no merge required): add label `e2e-slack-notify` on this PR.
-# That run posts one clearly labeled test line to #seedgym, then stop.
+# Labeled e2e (no merge required):
+#   touch .github/e2e-slack-notify.trigger && git commit/push on this branch.
+# That run posts one clearly labeled test line to #seedgym.
 
 name: Slack deploy and CI alerts
 
 on:
+  push:
+    branches:
+      - cursor/slack-ci-deploy-alerts-50ce
+    paths:
+      - ".github/e2e-slack-notify.trigger"
   deployment_status:
   workflow_run:
     types: [completed]
-  pull_request:
-    types: [labeled]
   workflow_dispatch:
     inputs:
       mode:
@@ -28,8 +32,7 @@ permissions: {}
 jobs:
   notify:
     if: |
-      (github.event_name == 'pull_request' &&
-        github.event.label.name == 'e2e-slack-notify') ||
+      (github.event_name == 'push') ||
       (github.event_name == 'workflow_dispatch') ||
       (github.event_name == 'deployment_status' &&
         (github.event.deployment_status.state == 'success' ||
@@ -59,12 +62,10 @@ jobs:
           DEPLOY_REF: ${{ github.event.deployment.ref }}
           DEPLOY_SHA: ${{ github.event.deployment.sha }}
           DEPLOY_URL: ${{ github.event.deployment_status.target_url }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          PR_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_LABEL: ${{ github.event.label.name }}
           DISPATCH_MODE: ${{ github.event.inputs.mode }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+          HEAD_REF: ${{ github.ref_name }}
           PAYLOAD_PATH: /tmp/slack-payload.json
         run: |
           python3 - << 'PY'
@@ -84,16 +85,15 @@ jobs:
 
           if not url:
               print("SLACK_WEBHOOK_URL is unset; skipping Slack post.")
-          elif event == "pull_request" or (event == "workflow_dispatch" and mode == "e2e"):
+          elif event == "push" or (event == "workflow_dispatch" and mode == "e2e"):
               text = (
                   f"E2E Slack alert test: {repo} "
-                  f"PR #{clean(os.environ.get('PR_NUMBER'), 12)} "
-                  f"label {clean(os.environ.get('PR_LABEL') or 'workflow_dispatch', 40)} "
-                  f"({clean(os.environ.get('PR_SHA') or os.environ.get('GITHUB_SHA'), 12)}) "
-                  f"{clean(os.environ.get('PR_URL') or os.environ.get('RUN_URL'), 300)}"
+                  f"branch {clean(os.environ.get('HEAD_REF'), 80)} "
+                  f"label e2e-slack-notify "
+                  f"({clean(os.environ.get('HEAD_SHA'), 12)}) "
+                  f"{clean(os.environ.get('RUN_URL'), 300)}"
               )
           elif event == "workflow_dispatch" and mode == "skip-check":
-              # Intentionally no text when asked only to verify skip path wiring.
               print("skip-check mode: not posting a Slack message.")
           elif event == "workflow_run":
               text = (

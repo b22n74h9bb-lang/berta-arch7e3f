@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { oauthMessage } from "@contracts/oauth";
 
 function getOAuthUrl() {
   const kimiAuthUrl = import.meta.env.VITE_KIMI_AUTH_URL;
@@ -15,7 +16,13 @@ function getOAuthUrl() {
   return url.toString();
 }
 
+function oauthReasonFromLocation(): string | null {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get("oauth");
+}
+
 export default function Login() {
+  const notice = oauthMessage(oauthReasonFromLocation());
   return (
     <div className="min-h-screen flex items-center justify-center">
       <Card className="w-full max-w-sm">
@@ -23,6 +30,11 @@ export default function Login() {
           <CardTitle>Welcome</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3">
+          {notice ? (
+            <p className="text-sm text-muted-foreground text-center" role="status">
+              {notice}
+            </p>
+          ) : null}
           <Button className="w-full" size="lg" onClick={() => {
             window.location.href = getOAuthUrl();
           }}>

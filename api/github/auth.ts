@@ -9,6 +9,11 @@ import { signSessionToken } from "../kimi/session";
 import { findUserByUnionId, setUserRole, upsertUser } from "../queries/users";
 import { touchMemberIdentity } from "../queries/members";
 import { githubUnionId, isVerifiedOwner, oauthStatesMatch } from "./membership";
+import {
+  describeCallbackArrival,
+  loginRedirect,
+  stateKindFromQuery,
+} from "./oauth-callback";
 
 const STATE_COOKIE = "gh_oauth_state";
 const GITHUB_SCOPE = "read:user user:email";
@@ -133,20 +138,38 @@ async function fetchProfile(token: string): Promise<{ profile: GithubUser; email
 
 export async function handleGithubCallback(c: Context) {
   const providerError = c.req.query("error");
-  if (providerError) {
-    clearStateCookie(c);
-    log.warn("github authorization was not completed", {
-      reason: providerError === "access_denied" ? "access_denied" : "provider_error",
-    });
-    return c.redirect("/login", 302);
-  }
-  if (!githubOAuthConfigured()) return c.json({ error: "github_oauth_disabled" }, 404);
   const code = c.req.query("code");
   const state = c.req.query("state");
   const cookieState = getCookie(c, STATE_COOKIE);
+  log.info(
+    "github oauth callback",
+    describeCallbackArrival({
+      hasCode: Boolean(code),
+      hasState: Boolean(state),
+      stateKind: stateKindFromQuery(state),
+      hasCookieState: Boolean(cookieState),
+      providerError,
+    }),
+  );
+  if (providerError) {
+    clearStateCookie(c);
+    const reason = providerError === "access_denied" ? "denied" : "provider_error";
+    log.warn("github authorization was not completed", { reason });
+    return c.redirect(loginRedirect(reason), 302);
+  }
+  if (!githubOAuthConfigured()) {
+    clearStateCookie(c);
+    return c.redirect(loginRedirect("disabled"), 302);
+  }
   clearStateCookie(c);
-  if (!code) return c.json({ error: "code_required" }, 400);
-  if (!oauthStatesMatch(state, cookieState)) return c.json({ error: "invalid_oauth_state" }, 400);
+  if (!code) return c.redirect(loginRedirect("missing_code"), 302);
+  if (!oauthStatesMatch(state, cookieState)) {
+    log.warn("github oauth state rejected", {
+      hasQueryState: Boolean(state),
+      hasCookieState: Boolean(cookieState),
+    });
+    return c.redirect(loginRedirect("invalid_state"), 302);
+  }
   try {
     const callbackUrl = redirectUri(c);
     const accessToken = await exchangeCode(code, callbackUrl);
@@ -188,6 +211,6 @@ export async function handleGithubCallback(c: Context) {
   } catch (error) {
     const status = error instanceof GithubRequestError ? error.status : undefined;
     log.error("github sign-in failed", status ? { status } : undefined);
-    return c.json({ error: "github_sign_in_failed" }, 500);
+    return c.redirect(loginRedirect("failed"), 302);
   }
 }

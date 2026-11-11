@@ -12,4 +12,5 @@ export const Paths = {
   login: "/login",
   oauthCallback: "/api/oauth/callback",
   githubAuthorize: "/api/oauth/github",
+  githubWebhook: "/api/webhooks/github",
 } as const;

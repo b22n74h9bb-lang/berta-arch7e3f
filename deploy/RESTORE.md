@@ -11,7 +11,8 @@ Show that core task / mission / chat rows remain usable after a backup → wipe 
 
 | Artifact | Covered |
 |----------|---------|
-| `users`, `missions`, `tasks`, `chat_messages`, `approvals`, `sandbox_jobs`, `members` | Yes — schema + sample rows |
+| Schema for all Drizzle tables (including `approvals`, `sandbox_jobs`, `members`) | Yes — applied via `db:push` |
+| Sample rows verified after restore | `users`, `missions`, `tasks`, `chat_messages`, `approvals`, `sandbox_jobs`, `members` |
 | Generated media in object storage | No — provider dependency; document only |
 | Kimi / GitHub OAuth secrets | No — host `.env` only; never dump secrets |
 | Production Bandwagon MySQL | Optional later — needs host access; this drill uses a throwaway MySQL |
@@ -29,8 +30,8 @@ The script:
 
 1. Starts `berta-restore-drill-mysql` (MySQL 8) bound to `127.0.0.1` only.
 2. Applies schema with `npm run db:push` against that instance.
-3. Inserts a labeled sample owner user, mission, task, and chat row.
-4. Writes a logical dump to `artifacts/restore-drill/before.sql` (gitignored path under `/tmp` by default).
+3. Inserts labeled sample rows for `users`, `missions`, `tasks`, `chat_messages`, `approvals`, `sandbox_jobs`, and `members`.
+4. Writes a logical dump to `/tmp/berta-restore-drill/before.sql` by default (`DRILL_ARTIFACT_DIR` overrides).
 5. Drops and recreates the database.
 6. Restores the dump.
 7. Verifies row counts and the sample task title.

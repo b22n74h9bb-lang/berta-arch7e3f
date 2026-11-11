@@ -1,6 +1,9 @@
 # Fallback alerts for #seedgym. The GitHub Slack app remains the primary path.
 # Inactive until GitHub Environment "slack" has secret SLACK_WEBHOOK_URL.
 # Do not put secret values in this file.
+#
+# Labeled e2e (no merge required): add label `e2e-slack-notify` on this PR.
+# That run posts one clearly labeled test line to #seedgym, then stop.
 
 name: Slack deploy and CI alerts
 
@@ -8,12 +11,26 @@ on:
   deployment_status:
   workflow_run:
     types: [completed]
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Manual mode after the workflow exists on the default branch"
+        required: true
+        type: choice
+        options:
+          - e2e
+          - skip-check
 
 permissions: {}
 
 jobs:
   notify:
     if: |
+      (github.event_name == 'pull_request' &&
+        github.event.label.name == 'e2e-slack-notify') ||
+      (github.event_name == 'workflow_dispatch') ||
       (github.event_name == 'deployment_status' &&
         (github.event.deployment_status.state == 'success' ||
          github.event.deployment_status.state == 'failure' ||
@@ -42,6 +59,12 @@ jobs:
           DEPLOY_REF: ${{ github.event.deployment.ref }}
           DEPLOY_SHA: ${{ github.event.deployment.sha }}
           DEPLOY_URL: ${{ github.event.deployment_status.target_url }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_LABEL: ${{ github.event.label.name }}
+          DISPATCH_MODE: ${{ github.event.inputs.mode }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           PAYLOAD_PATH: /tmp/slack-payload.json
         run: |
           python3 - << 'PY'
@@ -57,9 +80,21 @@ jobs:
           event = os.environ.get("EVENT_NAME", "")
           repo = clean(os.environ.get("REPO"), 120)
           text = ""
+          mode = clean(os.environ.get("DISPATCH_MODE"), 40)
 
           if not url:
               print("SLACK_WEBHOOK_URL is unset; skipping Slack post.")
+          elif event == "pull_request" or (event == "workflow_dispatch" and mode == "e2e"):
+              text = (
+                  f"E2E Slack alert test: {repo} "
+                  f"PR #{clean(os.environ.get('PR_NUMBER'), 12)} "
+                  f"label {clean(os.environ.get('PR_LABEL') or 'workflow_dispatch', 40)} "
+                  f"({clean(os.environ.get('PR_SHA') or os.environ.get('GITHUB_SHA'), 12)}) "
+                  f"{clean(os.environ.get('PR_URL') or os.environ.get('RUN_URL'), 300)}"
+              )
+          elif event == "workflow_dispatch" and mode == "skip-check":
+              # Intentionally no text when asked only to verify skip path wiring.
+              print("skip-check mode: not posting a Slack message.")
           elif event == "workflow_run":
               text = (
                   f"CI {clean(os.environ.get('WF_CONCLUSION'))}: {repo} "
@@ -84,10 +119,15 @@ jobs:
               with open(path, "w", encoding="utf-8") as handle:
                   json.dump({"text": text}, handle)
               print("Slack payload written.")
+          elif url and not text:
+              print("Secret present but no payload text for this mode.")
+          else:
+              print("No Slack payload.")
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
               handle.write(f"present={'true' if present else 'false'}\n")
               handle.write(f"path={path}\n")
+              handle.write(f"secret_present={'true' if bool(url) else 'false'}\n")
           PY
 
       - name: Post to Slack
@@ -99,3 +139,8 @@ jobs:
           payload-file-path: ${{ steps.payload.outputs.path }}
           payload-templated: false
           errors: true
+
+      - name: Report secret visibility (boolean only)
+        run: |
+          echo "secret_present=${{ steps.payload.outputs.secret_present }}"
+          echo "payload_present=${{ steps.payload.outputs.present }}"

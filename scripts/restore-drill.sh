@@ -84,6 +84,12 @@ INSERT INTO tasks (userId, title, category, status, progress, position, createdA
 VALUES (@uid, '${SAMPLE_TASK}', 'Mission', 'todo', 0, 0, NOW(), NOW());
 INSERT INTO chat_messages (userId, role, content, createdAt)
 VALUES (@uid, 'system', 'restore-drill seed message', NOW());
+INSERT INTO approvals (userId, title, detail, risk, status, createdAt)
+VALUES (@uid, 'RESTORE-DRILL-APPROVAL', 'Sample approval for restore drill', 'low', 'pending', NOW());
+INSERT INTO sandbox_jobs (userId, name, kind, status, progress, budgetCredits, executor, createdAt, updatedAt)
+VALUES (@uid, 'RESTORE-DRILL-JOB', 'probe', 'queued', 0, 1, 'not-connected', NOW(), NOW());
+INSERT INTO members (githubId, login, status, role, sessionGeneration, userId, createdAt, updatedAt)
+VALUES ('0', 'restore-drill', 'pending', 'member', 1, @uid, NOW(), NOW());
 SQL
 
 BEFORE="${ARTIFACT_DIR}/before.sql"
@@ -110,7 +116,10 @@ SELECT CONCAT(
   'users=', (SELECT COUNT(*) FROM users),
   ' missions=', (SELECT COUNT(*) FROM missions),
   ' tasks=', (SELECT COUNT(*) FROM tasks),
-  ' chat_messages=', (SELECT COUNT(*) FROM chat_messages)
+  ' chat_messages=', (SELECT COUNT(*) FROM chat_messages),
+  ' approvals=', (SELECT COUNT(*) FROM approvals),
+  ' sandbox_jobs=', (SELECT COUNT(*) FROM sandbox_jobs),
+  ' members=', (SELECT COUNT(*) FROM members)
 );
 SELECT title FROM tasks WHERE title='${SAMPLE_TASK}' LIMIT 1;
 SQL
@@ -122,7 +131,14 @@ TASK="$(printf '%s\n' "$VERIFY_OUT" | sed -n '2p')"
 echo "counts: ${COUNTS}"
 echo "sample_task: ${TASK:-MISSING}"
 
-if [[ "$TASK" == "$SAMPLE_TASK" ]] && [[ "$COUNTS" == *"tasks=1"* ]] && [[ "$COUNTS" == *"users=1"* ]]; then
+if [[ "$TASK" == "$SAMPLE_TASK" ]] \
+  && [[ "$COUNTS" == *"users=1"* ]] \
+  && [[ "$COUNTS" == *"missions=1"* ]] \
+  && [[ "$COUNTS" == *"tasks=1"* ]] \
+  && [[ "$COUNTS" == *"chat_messages=1"* ]] \
+  && [[ "$COUNTS" == *"approvals=1"* ]] \
+  && [[ "$COUNTS" == *"sandbox_jobs=1"* ]] \
+  && [[ "$COUNTS" == *"members=1"* ]]; then
   echo "RESTORE_DRILL=PASS"
   echo "artifact=${BEFORE}"
   echo "note=throwaway_mysql_only_not_production"

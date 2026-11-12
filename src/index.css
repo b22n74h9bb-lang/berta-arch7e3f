@@ -257,6 +257,15 @@
 .button--large { min-height: 52px; padding: 14px 20px; font-size: 14px; }
 .text-button { min-height: 44px; padding: 8px 0 0; border: 0; background: transparent; color: var(--action-primary); font-size: 12px; }
 .objective-editor { width: 100%; resize: vertical; padding: 13px; border: 1px solid var(--surface-border); border-radius: 5px; background: var(--surface-page); color: var(--text-secondary); font-size: 13px; line-height: 1.75; }
+.charter-editor { min-height: 240px; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; }
+.charter-toolbar, .charter-version__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.charter-toolbar { margin-top: 12px; }
+.charter-note { margin: 10px 0 0; color: var(--text-tertiary); font: 500 12px/1.5 "JetBrains Mono", monospace; }
+.charter-banner { display: grid; gap: 10px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--surface-border); border-radius: 5px; color: var(--text-secondary); font-size: 13px; }
+.charter-banner p { margin: 0; }
+.charter-history { list-style: none; margin: 18px 0 0; padding: 0; max-height: 320px; overflow: auto; }
+.charter-version { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 12px 0; border-top: 1px solid var(--surface-border); }
+.charter-version p { margin: 0; color: var(--text-secondary); font: 500 12px/1.55 "JetBrains Mono", monospace; }
 .task-list, .job-list, .approval-list { display: grid; }
 .task-row { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 10px; padding: 15px 0; border-top: 1px solid var(--surface-border); }
 .task-check { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid var(--surface-border); border-radius: 50%; background: transparent; color: var(--text-tertiary); }

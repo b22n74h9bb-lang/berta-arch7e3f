@@ -30,7 +30,9 @@ dist-ssr
 *.db
 *.sqlite
 *.sqlite3
+# Drizzle-kit output stays untracked. The charter statement is checked in.
 db/migrations/*.sql
+!db/migrations/0001_charters.sql
 # TypeScript cache
 *.tsbuildinfo
 # Build outputs

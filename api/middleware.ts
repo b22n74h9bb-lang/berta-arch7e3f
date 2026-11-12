@@ -2,6 +2,7 @@ import { ErrorMessages } from "@contracts/constants";
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import type { TrpcContext } from "./context";
+import { charterAccess, charterAccessError } from "./charter/access";
 import { mayAccessProtectedData } from "./github/membership";
 import { log } from "./lib/logger";
 
@@ -21,6 +22,7 @@ const t = initTRPC.context<TrpcContext>().create({
 });
 
 export const createRouter = t.router;
+export const createCallerFactory = t.createCallerFactory;
 export const publicQuery = t.procedure;
 
 const requireAuth = t.middleware(async (opts) => {
@@ -56,3 +58,11 @@ const requireApproved = t.middleware(async (opts) => {
 
 export const approvedQuery = authedQuery.use(requireApproved);
 export const adminQuery = approvedQuery.use(requireRole("admin"));
+
+export const ownerCharterQuery = t.procedure.use(async (opts) => {
+  const access = charterAccess(opts.ctx.user ?? null);
+  if (!access.ok) throw charterAccessError(access.reason);
+  const user = opts.ctx.user;
+  if (!user) throw charterAccessError("unauthenticated");
+  return opts.next({ ctx: { ...opts.ctx, user } });
+});

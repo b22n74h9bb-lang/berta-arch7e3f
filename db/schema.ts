@@ -1,5 +1,5 @@
 import {
-  bigint, boolean, index, int, mysqlEnum, mysqlTable, serial, text, timestamp,
+  bigint, boolean, index, int, mediumtext, mysqlEnum, mysqlTable, serial, text, timestamp,
   uniqueIndex, varchar,
 } from "drizzle-orm/mysql-core";
 
@@ -108,6 +108,20 @@ export const approvals = mysqlTable(
   (table) => ({ userIdx: index("approvals_user_idx").on(table.userId) }),
 );
 
+/** Append-only persona charter. The highest version is active. */
+export const charters = mysqlTable(
+  "charters",
+  {
+    id: serial("id").primaryKey(),
+    version: int("version").notNull(),
+    body: mediumtext("body").notNull(),
+    authorUserId: bigint("authorUserId", { mode: "number", unsigned: true }).notNull(),
+    restoredFromVersion: int("restoredFromVersion"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({ versionIdx: uniqueIndex("charters_version_idx").on(table.version) }),
+);
+
 export const chatMessages = mysqlTable(
   "chat_messages",
   {
@@ -212,6 +226,7 @@ export type Mission = typeof missions.$inferSelect;
 export type Task = typeof tasks.$inferSelect;
 export type SandboxJob = typeof sandboxJobs.$inferSelect;
 export type Approval = typeof approvals.$inferSelect;
+export type Charter = typeof charters.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type BridgeEvent = typeof bridgeEvents.$inferSelect;
 export type MissionRecord = typeof missionRecords.$inferSelect;

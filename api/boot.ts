@@ -5,6 +5,8 @@ import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./router";
 import { createContext } from "./context";
 import { env } from "./lib/env";
+import { healthReport, listenHostname } from "./lib/health";
+import { pingDb } from "./queries/connection";
 import { createOAuthCallbackHandler } from "./kimi/auth";
 import { createGithubAuthorizeHandler } from "./github/auth";
 import { createGithubWebhookHandler } from "./bridge/github-webhook";
@@ -42,13 +44,16 @@ app.get(Paths.githubAuthorize, createGithubAuthorizeHandler());
 app.get(Paths.oauthCallback, createOAuthCallbackHandler());
 app.post(Paths.githubWebhook, bodyLimit({ maxSize: 1024 * 1024 }), createGithubWebhookHandler());
 app.on(["GET", "POST"], "/api/wechat/callback", bodyLimit({ maxSize: 64 * 1024 }), createWechatCallbackHandler());
-app.get("/api/health", (c) =>
-  c.json({
-    ok: true,
-    service: "berta-arch7e3f",
-    time: new Date().toISOString(),
-  }),
-);
+app.get("/api/health", async (c) => {
+  let dbUp = false;
+  try {
+    dbUp = await pingDb();
+  } catch {
+    dbUp = false;
+  }
+  const report = healthReport(dbUp);
+  return c.json(report.body, report.status);
+});
 app.use("/api/trpc/*", async (c) => {
   return fetchRequestHandler({ endpoint: "/api/trpc", req: c.req.raw, router: appRouter, createContext });
 });
@@ -72,5 +77,6 @@ if (env.isProduction) {
   const { serveStaticFiles } = await import("./lib/vite");
   serveStaticFiles(app);
   const port = parseInt(process.env.PORT || "3000");
-  serve({ fetch: app.fetch, port }, () => log.info(`Server running on http://localhost:${port}/`));
+  const hostname = listenHostname(process.env.HOST);
+  serve({ fetch: app.fetch, hostname, port }, () => log.info(`Server running on http://${hostname}:${port}/`));
 }

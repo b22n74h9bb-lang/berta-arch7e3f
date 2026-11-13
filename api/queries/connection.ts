@@ -7,6 +7,17 @@ let pool: mysql.Pool | undefined;
 type Database = MySql2Database<typeof schema> & { $client: mysql.Pool };
 let db: Database | undefined;
 
+export async function pingDb(): Promise<boolean> {
+  if (!env.databaseUrl) return false;
+  const connection = await mysql.createConnection({ uri: env.databaseUrl, connectTimeout: 2000 });
+  try {
+    await connection.query("SELECT 1");
+    return true;
+  } finally {
+    await connection.end();
+  }
+}
+
 export function getDb() {
   if (!db) {
     pool = mysql.createPool({

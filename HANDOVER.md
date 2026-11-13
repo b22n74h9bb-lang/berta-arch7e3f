@@ -204,7 +204,8 @@ bash scripts/probe-bertapp.sh app.bertapp.life
 | Chat read-only task state | Post-deploy spec |
 | Shared assignment model | Post-deploy spec |
 | Bridge webhook persistence | `POST /api/webhooks/github` verifies HMAC and fails closed without `GITHUB_WEBHOOK_SECRET`; event rows not written until owner-approved follow-up |
-| Hooks / Claw plugins | Owner registration and approval are in Settings. Default deny. Token hashes only; no route accepts the token. Hook dispatch and `/api/wechat/callback` stay disabled (`wechat_disabled`). See `docs/claw-plugins.md` and `docs/wechat-integration.md`. |
+| Hooks / Claw plugins | Owner registration is in Settings through the bridge. Default deny. `/api/wechat/callback` stays disabled (`wechat_disabled`). See `docs/claw-plugins.md` and `docs/wechat-integration.md`. |
+| Backup / restore drill | Non-prod runbook: `deploy/RESTORE.md` + `scripts/restore-drill.sh`. The 13 Nov drills were isolated and did not wipe production. |
 | `MISSION.md` / this file | Added so Berta can run solo |
 
 ---
@@ -221,7 +222,8 @@ bash scripts/probe-bertapp.sh app.bertapp.life
 - `MISSION.md` — purpose / layers / rules
 - `README.md` — developer overview
 - `HANDOVER.md` — this runbook
-- `deploy/` — Bandwagon compose, Caddy, nginx, cutover checklist
+- `deploy/` — Bandwagon compose, Caddy, nginx, cutover checklist, restore drill (`RESTORE.md`)
+- `scripts/restore-drill.sh` — throwaway MySQL backup → wipe → restore evidence
 - `.env.example` — env names
 - `Dockerfile` — Node 22 Alpine → `:3000` (accepts `VITE_*` build args)
 - `api/` — Hono/tRPC, OAuth callback at `/api/oauth/callback`, `/api/health`

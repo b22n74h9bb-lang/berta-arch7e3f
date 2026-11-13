@@ -3,10 +3,13 @@ import { and, desc, eq } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { approvals, chatMessages, missions, sandboxJobs, tasks } from "@db/schema";
+import { charterRouter } from "./charter/router";
 import { createRouter, approvedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import { ensureMission, getMissionState, ownedApproval, ownedJob, ownedTask } from "./queries/berta";
 import { kimiGw } from "./ai/provider";
+import { readChatSystemPrompt } from "./charter/prompt";
+import { latestCharter } from "./queries/charter";
 import {
   generateAndStoreImage,
   getStoredImageUrl,
@@ -20,10 +23,6 @@ import {
   classifyAiError,
   listModels,
 } from "./ai/client";
-
-const BERTA_SYSTEM = `You are Berta, the user's autonomous but bounded research collaborator for mission ARCH7E3F.
-Mission: build a Human CRISPR Atlas using lawful public human-derived datasets, and a methodologically separate aggregate analysis of public reactions to CRISPR and genome editing.
-Rules: no mouse-derived core data; no human experimentation; no individual profiling, de-anonymization, sensitive-trait inference, persuasion target lists, or manipulation; never claim molecular CRISPR findings directly control complex social behaviour. Keep facts, assumptions, hypotheses, and unknowns distinct. Rabbit mode means acting independently only on reversible, low-risk, authorized work within resource limits. Ask before large downloads, restricted data, external contact, publication, purchases, or high-impact actions. Be concise, warm, scientifically rigorous, and concrete. Never claim to have accessed a Claw runtime, dataset, screen, or tool unless it is actually connected in the current conversation.`;
 
 function aiError(error: unknown): TRPCError {
   const classified = classifyAiError(error);
@@ -66,6 +65,7 @@ function imageError(error: unknown): TRPCError {
 }
 
 export const bertaRouter = createRouter({
+  charter: charterRouter,
   bootstrap: approvedQuery.query(({ ctx }) => getMissionState(ctx.user.id)),
 
   updateMission: approvedQuery
@@ -284,9 +284,10 @@ export const bertaRouter = createRouter({
 
       try {
         const { defaultModelId } = await listModels();
+        const system = await readChatSystemPrompt(async () => (await latestCharter())?.body);
         const result = await generateText({
           model: kimiGw(defaultModelId),
-          system: BERTA_SYSTEM,
+          system,
           messages,
           providerOptions: { "kimi-gw": { max_completion_tokens: 1400 } },
         });

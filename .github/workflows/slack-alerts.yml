@@ -1,0 +1,150 @@
+# Fallback alerts for #seedgym. The GitHub Slack app remains the primary path.
+# Inactive until GitHub Environment "slack" has secret SLACK_WEBHOOK_URL.
+# Do not put secret values in this file.
+#
+# Labeled e2e (no merge required):
+#   touch .github/e2e-slack-notify.trigger && git commit/push on this branch.
+# That run posts one clearly labeled test line to #seedgym.
+
+name: Slack deploy and CI alerts
+
+on:
+  push:
+    branches:
+      - cursor/slack-ci-deploy-alerts-50ce
+    paths:
+      - ".github/e2e-slack-notify.trigger"
+  deployment_status:
+  workflow_run:
+    # GitHub rejects this event when workflows is omitted (0-job failure).
+    # Point this at the CI workflow name once one exists on main.
+    workflows: ["CI"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Manual mode after the workflow exists on the default branch"
+        required: true
+        type: choice
+        options:
+          - e2e
+          - skip-check
+
+permissions: {}
+
+jobs:
+  notify:
+    if: |
+      (github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'deployment_status' &&
+        github.event.deployment.environment != 'slack' &&
+        (github.event.deployment_status.state == 'success' ||
+         github.event.deployment_status.state == 'failure' ||
+         github.event.deployment_status.state == 'error')) ||
+      (github.event_name == 'workflow_run' &&
+        github.event.workflow_run.name != 'Slack deploy and CI alerts' &&
+        (github.event.workflow_run.conclusion == 'failure' ||
+         github.event.workflow_run.conclusion == 'timed_out'))
+    runs-on: ubuntu-latest
+    environment: slack
+    timeout-minutes: 5
+    steps:
+      - name: Build Slack payload
+        id: payload
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          WF_NAME: ${{ github.event.workflow_run.name }}
+          WF_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          WF_URL: ${{ github.event.workflow_run.html_url }}
+          WF_SHA: ${{ github.event.workflow_run.head_sha }}
+          WF_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          DEPLOY_STATE: ${{ github.event.deployment_status.state }}
+          DEPLOY_ENV: ${{ github.event.deployment_status.environment }}
+          DEPLOY_REF: ${{ github.event.deployment.ref }}
+          DEPLOY_SHA: ${{ github.event.deployment.sha }}
+          DEPLOY_URL: ${{ github.event.deployment_status.target_url }}
+          DISPATCH_MODE: ${{ github.event.inputs.mode }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+          HEAD_REF: ${{ github.ref_name }}
+          PAYLOAD_PATH: /tmp/slack-payload.json
+        run: |
+          python3 - << 'PY'
+          import json
+          import os
+
+          def clean(value, limit=200):
+              text = " ".join(str(value or "").split())
+              return text[:limit]
+
+          url = os.environ.get("SLACK_WEBHOOK_URL", "").strip()
+          path = os.environ["PAYLOAD_PATH"]
+          event = os.environ.get("EVENT_NAME", "")
+          repo = clean(os.environ.get("REPO"), 120)
+          text = ""
+          mode = clean(os.environ.get("DISPATCH_MODE"), 40)
+
+          if not url:
+              print("SLACK_WEBHOOK_URL is unset; skipping Slack post.")
+          elif event == "push" or (event == "workflow_dispatch" and mode == "e2e"):
+              text = (
+                  f"E2E Slack alert test: {repo} "
+                  f"branch {clean(os.environ.get('HEAD_REF'), 80)} "
+                  f"label e2e-slack-notify "
+                  f"({clean(os.environ.get('HEAD_SHA'), 12)}) "
+                  f"{clean(os.environ.get('RUN_URL'), 300)}"
+              )
+          elif event == "workflow_dispatch" and mode == "skip-check":
+              print("skip-check mode: not posting a Slack message.")
+          elif event == "workflow_run":
+              text = (
+                  f"CI {clean(os.environ.get('WF_CONCLUSION'))}: {repo} "
+                  f"workflow {clean(os.environ.get('WF_NAME'))} "
+                  f"on {clean(os.environ.get('WF_BRANCH'))} "
+                  f"({clean(os.environ.get('WF_SHA'), 12)}) "
+                  f"{clean(os.environ.get('WF_URL'), 300)}"
+              )
+          elif event == "deployment_status":
+              text = (
+                  f"Deploy {clean(os.environ.get('DEPLOY_STATE'))}: {repo} "
+                  f"env {clean(os.environ.get('DEPLOY_ENV'))} "
+                  f"ref {clean(os.environ.get('DEPLOY_REF'))} "
+                  f"({clean(os.environ.get('DEPLOY_SHA'), 12)}) "
+                  f"{clean(os.environ.get('DEPLOY_URL'), 300)}"
+              ).strip()
+          else:
+              print(f"Unexpected event {clean(event, 40)}; skipping.")
+
+          present = bool(url and text)
+          if present:
+              with open(path, "w", encoding="utf-8") as handle:
+                  json.dump({"text": text}, handle)
+              print("Slack payload written.")
+          elif url and not text:
+              print("Secret present but no payload text for this mode.")
+          else:
+              print("No Slack payload.")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+              handle.write(f"present={'true' if present else 'false'}\n")
+              handle.write(f"path={path}\n")
+              handle.write(f"secret_present={'true' if bool(url) else 'false'}\n")
+          PY
+
+      - name: Post to Slack
+        if: steps.payload.outputs.present == 'true'
+        uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v4.0.0
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload-file-path: ${{ steps.payload.outputs.path }}
+          payload-templated: false
+          errors: true
+
+      - name: Report secret visibility (boolean only)
+        run: |
+          echo "secret_present=${{ steps.payload.outputs.secret_present }}"
+          echo "payload_present=${{ steps.payload.outputs.present }}"

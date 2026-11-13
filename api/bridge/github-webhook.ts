@@ -1,7 +1,57 @@
+import { and, eq } from "drizzle-orm";
 import type { Context } from "hono";
+import { bridgeEvents, missionRecords } from "@db/schema";
 import { env } from "../lib/env";
 import { log } from "../lib/logger";
+import { getDb } from "../queries/connection";
 import { githubSignatureValid, normalizeGithubDelivery } from "./security";
+
+function readSummary(body: unknown, eventType: string, repo: string | null, ref: string | null): string {
+  const record = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+  const head = record.head_commit as { message?: unknown } | undefined;
+  const message = head && typeof head.message === "string" ? head.message : "";
+  const base = repo ? `${repo}${ref ? ` @ ${ref}` : ""}` : eventType;
+  return (message ? `${eventType}: ${message}` : `${eventType} on ${base}`).slice(0, 500);
+}
+
+/**
+ * Persist the accepted delivery and create an in-app mission record.
+ * Idempotent on (deliveryId, payloadHash): redeliveries refresh lastSeenAt
+ * without duplicating the mission record. Never throws — the ingress must
+ * stay honest-but-available: acceptance is acked, persistence is reported.
+ */
+async function persistDelivery(event: {
+  type: string; deliveryId: string; payloadHash: string;
+  actorLogin: string | null; repo: string | null; ref: string | null;
+}, body: unknown): Promise<{ persisted: boolean; missionRecordId?: number }> {
+  try {
+    const db = getDb();
+    await db.insert(bridgeEvents).values({
+      source: "github", type: event.type, deliveryId: event.deliveryId,
+      payloadHash: event.payloadHash, actorLogin: event.actorLogin,
+      repo: event.repo, ref: event.ref,
+    }).onDuplicateKeyUpdate({ set: { lastSeenAt: new Date() } });
+    const rows = await db.select().from(bridgeEvents).where(
+      and(eq(bridgeEvents.deliveryId, event.deliveryId), eq(bridgeEvents.payloadHash, event.payloadHash)),
+    ).limit(1);
+    const bridgeRow = rows[0];
+    if (!bridgeRow) return { persisted: false };
+    const existing = await db.select().from(missionRecords)
+      .where(eq(missionRecords.sourceEventId, bridgeRow.id)).limit(1);
+    if (existing.length > 0) return { persisted: true, missionRecordId: existing[0].id };
+    const inserted = await db.insert(missionRecords).values({
+      kind: `github.${event.type}`.slice(0, 80),
+      summary: readSummary(body, event.type, event.repo, event.ref),
+      actorLogin: event.actorLogin, repo: event.repo, ref: event.ref,
+      state: "open", sourceEventId: bridgeRow.id,
+    });
+    const missionRecordId = Number(inserted[0]?.insertId ?? 0) || undefined;
+    return { persisted: true, missionRecordId };
+  } catch (error) {
+    log.error("github webhook persistence failed", { error: String(error), deliveryId: event.deliveryId });
+    return { persisted: false };
+  }
+}
 
 function readActorAndRefs(body: unknown): {
   actorLogin?: string;
@@ -28,7 +78,8 @@ function readActorAndRefs(body: unknown): {
 /**
  * GitHub → Berta bridge ingress.
  * Fail closed without a configured secret. Verify HMAC before parsing for projection.
- * Persistence of bridge_events is additive and wired after owner review of this scaffold.
+ * Persistence of bridge_events and the in-app mission record is wired below;
+ * dedup on (deliveryId, payloadHash), ledger failures never block acceptance.
  */
 export function createGithubWebhookHandler() {
   return async (c: Context) => {
@@ -69,10 +120,12 @@ export function createGithubWebhookHandler() {
       payloadHash: event.payloadHash,
       repo: event.repo,
     });
+    const persisted = await persistDelivery(event, parsed);
     return c.json({
       ok: true,
       accepted: true,
-      persisted: false,
+      persisted: persisted.persisted,
+      missionRecordId: persisted.missionRecordId,
       deliveryId: event.deliveryId,
       type: event.type,
       payloadHash: event.payloadHash,

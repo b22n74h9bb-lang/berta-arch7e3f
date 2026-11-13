@@ -55,9 +55,11 @@ export function MembersPanel() {
             <div key={member.githubId} className="member-row">
               <div>
                 <h3>{member.login}</h3>
-                <span className="member-status">{member.role === "admin" ? "owner" : member.status}</span>
+                <span className="member-status">
+                  {member.isOwnerAccount ? "owner" : member.status}
+                </span>
               </div>
-              {member.role !== "admin" && (
+              {!member.isOwnerAccount && (
                 <div className="member-actions">
                   {member.status !== "approved" && (
                     <button

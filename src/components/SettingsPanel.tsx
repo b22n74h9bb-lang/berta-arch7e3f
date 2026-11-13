@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Download, ExternalLink, LogOut, Mic2, Save, ShieldCheck, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { CharterPanel } from "@/components/CharterPanel";
 import { MembersPanel } from "@/components/MembersPanel";
 import { PluginsPanel } from "@/components/PluginsPanel";
 import { trpc } from "@/providers/trpc";
@@ -40,6 +41,7 @@ export function SettingsPanel({ data }: { data: BertaData }) {
           <p>{user?.name || "Berta operator"} · {user?.email || "Authenticated session"}</p>
         </div>
       </header>
+      {user?.verifiedOwner === true && <CharterPanel />}
       <section className="data-section">
         <div className="section-heading">
           <div><span className="micro-label">CLAW RUNTIME</span><h2>Connection</h2></div>
@@ -117,8 +119,12 @@ export function SettingsPanel({ data }: { data: BertaData }) {
         </ul>
         <a className="text-link" href="https://www.kimi.ai/help/kimi-claw/overview" target="_blank" rel="noreferrer">Official Kimi Claw overview <ExternalLink size={14} /></a>
       </section>
-      {user?.role === "admin" && <MembersPanel />}
-      {user?.role === "admin" && <PluginsPanel />}
+      {user?.role === "admin" && (
+        <>
+          <MembersPanel />
+          <PluginsPanel />
+        </>
+      )}
       <button type="button" className="button button--secondary signout-button" onClick={logout}><LogOut size={16} /> Sign out</button>
     </div>
   );

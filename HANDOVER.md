@@ -200,6 +200,7 @@ bash scripts/probe-bertapp.sh app.bertapp.life
 | Bridge webhook persistence | `POST /api/webhooks/github` verifies HMAC and fails closed without `GITHUB_WEBHOOK_SECRET`; event rows not written until owner-approved follow-up |
 | Hooks / Clawbot plugins | Owner Settings panel can register/approve/revoke plugins; tokens hashed + shown once; no third-party activation without owner approval |
 | WeChat bridge | Plan in `deploy/WECHAT.md` (env names only). Ingress route not live until secrets set and owner mode choice locked. |
+| Backup / restore drill | Non-prod runbook: `deploy/RESTORE.md` + `scripts/restore-drill.sh`. Production dump needs Bandwagon MySQL access. |
 | `MISSION.md` / this file | Added so Berta can run solo |
 
 ---
@@ -216,7 +217,8 @@ bash scripts/probe-bertapp.sh app.bertapp.life
 - `MISSION.md` — purpose / layers / rules
 - `README.md` — developer overview
 - `HANDOVER.md` — this runbook
-- `deploy/` — Bandwagon compose, Caddy, nginx, cutover checklist, WeChat plan (`WECHAT.md`)
+- `deploy/` — Bandwagon compose, Caddy, nginx, cutover checklist, WeChat plan (`WECHAT.md`), restore drill (`RESTORE.md`)
+- `scripts/restore-drill.sh` — throwaway MySQL backup → wipe → restore evidence
 - `.env.example` — env names (including WeChat host-only names)
 - `Dockerfile` — Node 22 Alpine → `:3000` (accepts `VITE_*` build args)
 - `api/` — Hono/tRPC, OAuth callback at `/api/oauth/callback`, `/api/health`, bridge plugin owner APIs

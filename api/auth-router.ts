@@ -38,7 +38,7 @@ export const authRouter = createRouter({
   }),
   listMembers: adminQuery.query(async ({ ctx }) => {
     assertOwner(ctx.user);
-    return listMembers();
+    return listMembers(env.ownerGithubId);
   }),
   decideMember: adminQuery.input(decisionInput).mutation(async ({ ctx, input }) => {
     assertOwner(ctx.user);

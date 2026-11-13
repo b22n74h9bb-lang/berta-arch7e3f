@@ -104,7 +104,7 @@ export async function touchMemberIdentity(input: {
   return saved;
 }
 
-export async function listMembers() {
+export async function listMembers(ownerGithubId = "") {
   await ensureMembersTable();
   const rows = await getDb().select().from(schema.members);
   return rows
@@ -114,13 +114,19 @@ export async function listMembers() {
       if (byStatus !== 0) return byStatus;
       return a.createdAt.getTime() - b.createdAt.getTime();
     })
-    .map((row) => ({
-      githubId: row.githubId,
-      login: row.login,
-      status: row.status,
-      role: row.role,
-      createdAt: row.createdAt,
-    }));
+    .map((row) => {
+      const isOwnerAccount =
+        row.role === "admin"
+        || (ownerGithubId.length > 0 && row.githubId === ownerGithubId);
+      return {
+        githubId: row.githubId,
+        login: row.login,
+        status: row.status,
+        role: row.role,
+        isOwnerAccount,
+        createdAt: row.createdAt,
+      };
+    });
 }
 
 export async function applyMemberDecision(githubId: string, next: MemberSnapshot) {

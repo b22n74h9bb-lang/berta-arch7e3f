@@ -39,6 +39,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3000"
+      HOST: "0.0.0.0"
       APP_ID: ${APP_ID}
       APP_SECRET: ${APP_SECRET}
       DATABASE_URL: ${DATABASE_URL:-mysql://${MYSQL_USER:-berta}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-berta}}

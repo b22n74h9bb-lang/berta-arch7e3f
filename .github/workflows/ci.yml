@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches:
+      - main
       - cursor/wp2-offline-continuity-6f36
   pull_request:
     branches:

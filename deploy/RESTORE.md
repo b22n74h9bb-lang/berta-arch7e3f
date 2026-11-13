@@ -1,5 +1,11 @@
 # Backup / restore drill — Berta
 
+## 13 Nov 2026 evidence
+
+Restore the app from `main` at `093be19` directly. The old pre-PR patch tarball is historical and is not required for that commit.
+
+WP3-R1 and WP3-R2 were isolated drills. They did not wipe production. The database used for those drills was MariaDB 11.8, not the Compose MySQL 8.4 image. A database dump does not restore sign-in. The filled env file has to come from the host or the retained off-server snapshot. That snapshot is mode 600, not an encrypted container, and there is no automatic rotation.
+
 Non-production restore evidence for the 12 Nov 2026, 18:00 Asia/Shanghai checkpoint.
 Ariel reviews. Cursor implements. No secrets in this file. Do not run against production.
 

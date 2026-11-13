@@ -240,6 +240,14 @@
 .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .section-heading h2 { margin-top: 4px; }
 .section-description { margin: -4px 0 16px; color: var(--text-secondary); font-size: 13px; }
+.offline-banner { margin: 8px 0 0; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+.sync-pill { font: 600 11px/1 "JetBrains Mono", monospace; letter-spacing: .06em; color: var(--text-tertiary); }
+.sync-pill.is-pending, .sync-pill.is-held { color: var(--state-warning); }
+.sync-pill.is-conflict { color: var(--state-danger); }
+.sync-pill.is-acked { color: var(--state-positive); }
+.offline-hold { margin-top: 10px; }
+.offline-note { padding: 15px 0; border-top: 1px solid var(--surface-border); }
+.offline-note h3 { margin: 6px 0 0; font-size: 14px; line-height: 1.5; }
 .section-grow { flex: 1; min-width: 0; }
 .section-grow > p { margin: 7px 0 0; color: var(--text-secondary); font-size: 13px; }
 .section-icon { align-self: flex-start; display: grid; place-items: center; width: 44px; height: 44px; flex: 0 0 44px; color: var(--action-primary); border: 1px solid var(--surface-border); border-radius: 50%; }

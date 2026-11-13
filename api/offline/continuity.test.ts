@@ -4,12 +4,14 @@ import {
   acknowledge,
   applyLocal,
   commitAccount,
+  commitSealed,
   emptyLedger,
   exportAccount,
   holdAction,
   listRecords,
   loadAccount,
   markRetry,
+  openLedger,
   receiveRemote,
   reconnect,
   recordSyncState,
@@ -196,6 +198,57 @@ describe("offline continuity ledger", () => {
   it("refuses a write that would pass the byte cap and leaves the store unchanged", () => {
     const created = applyLocal(emptyLedger(), operation(), 80);
     expect(created).toEqual({ ok: false, ledger: emptyLedger(), reason: "full" });
+  });
+
+  it("keeps a confirmed note when a later remote edit arrives", () => {
+    const created = applyLocal(emptyLedger(), operation());
+    if (!created.ok) throw new Error("apply failed");
+    const acked = acknowledge(created.ledger, "op-1");
+    const later = receiveRemote(acked, remote({ revision: 4, title: "Someone else edited" }));
+    expect(later.outcome).toBe("conflict");
+    expect(listRecords(later.ledger, "account-a")[0]?.title).toBe("Capture the offline note");
+    expect(later.ledger.conflicts.map((conflict) => conflict.reason)).toContain("edit-vs-edit");
+  });
+
+  it("records an account mismatch instead of adopting the other account", () => {
+    const created = applyLocal(emptyLedger(), operation());
+    if (!created.ok) throw new Error("apply failed");
+    const clash = receiveRemote(created.ledger, remote({ accountId: "account-b", title: "Other account" }));
+    expect(clash.outcome).toBe("conflict");
+    expect(clash.ledger.conflicts[0]?.reason).toBe("account");
+    expect(listRecords(clash.ledger, "account-a")[0]?.title).toBe("Capture the offline note");
+  });
+
+  it("refuses to save one account's ledger under another account", () => {
+    const first = applyLocal(emptyLedger(), operation());
+    if (!first.ok) throw new Error("apply failed");
+    const second = applyLocal(first.ledger, operation({
+      id: "op-b",
+      accountId: "account-b",
+      recordId: "note-b",
+      title: "Other account note",
+    }));
+    if (!second.ok) throw new Error("apply failed");
+    const store = memoryStore();
+    expect(commitAccount(store, "account-a", second.ledger)).toEqual({ ok: false, reason: "account" });
+    expect(store.data).toEqual({});
+  });
+
+  it("seals the ledger so the title is not readable without the passphrase", async () => {
+    const created = applyLocal(emptyLedger(), operation());
+    if (!created.ok) throw new Error("apply failed");
+    const store = memoryStore();
+    const sealed = await commitSealed(store, "account-a", created.ledger, "correct horse", 1_000);
+    expect(sealed.ok).toBe(true);
+    const raw = store.data["berta.offline.v1.account-a"] ?? "";
+    expect(raw.startsWith("enc:v1:")).toBe(true);
+    expect(raw).not.toContain("Capture the offline note");
+    expect(loadAccount(store, "account-a").problem).toBe("sealed");
+    const opened = restoreLedger(await openLedger(raw, "correct horse"));
+    expect(opened.ok).toBe(true);
+    if (!opened.ok) return;
+    expect(listRecords(opened.ledger, "account-a")[0]?.title).toBe("Capture the offline note");
+    await expect(openLedger(raw, "wrong passphrase")).rejects.toThrow("passphrase");
   });
 
   it("rejects a corrupt import and a version mismatch without a partial ledger", () => {

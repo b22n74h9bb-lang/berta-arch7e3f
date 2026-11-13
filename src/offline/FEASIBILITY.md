@@ -20,7 +20,7 @@ This branch adds that ledger.
 - The serialized ledger refuses a write over 1.5 MB and leaves the previous store untouched. A corrupt JSON value or a `version` other than 1 is rejected and not overwritten.
 - If the server cannot be reached and this device still has a last account, the mission screen shows those notes and says the server mission, chat, and AI are unavailable. A revoked or signed-out session does not open them.
 
-Limits, stated plainly: the store is localStorage, not SQLCipher and not IndexedDB. It is not encrypted. Offline launch still depends on the service worker having cached the shell during an earlier online visit. This branch does not change `sw.js`. There is no background sync. Server tasks, chat, and approvals are unchanged and still need the network. An airplane-mode test on the iPhone has not been run.
+Limits, stated plainly: the store is localStorage, not SQLCipher and not IndexedDB. A passphrase seals it with AES-GCM; without one, the notes stay unencrypted and the screen says so. The size cap is UTF-8 bytes. A newer remote edit or delete is kept as a visible conflict instead of replacing the local note. Offline launch still depends on the service worker having cached the shell during an earlier online visit. This branch does not change `sw.js`. There is no background sync, so a saved note is marked on device rather than pending sync. Server tasks, chat, and approvals are unchanged and still need the network. An airplane-mode test on the iPhone has not been run.
 
 ## Option B — dedicated iOS app and a local database
 

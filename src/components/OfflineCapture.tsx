@@ -3,16 +3,19 @@ import { Plus, ShieldAlert } from "lucide-react";
 import {
   applyLocal,
   commitAccount,
+  commitSealed,
   holdAction,
   listRecords,
   loadAccount,
+  openLedger,
   recordSyncState,
+  restoreLedger,
   type Ledger,
 } from "../offline/continuity";
 
 const stateLabel: Record<ReturnType<typeof recordSyncState>, string> = {
   local: "ON DEVICE",
-  pending: "PENDING SYNC",
+  pending: "ON DEVICE",
   acked: "ACKNOWLEDGED",
   conflict: "CONFLICT",
   held: "HELD",
@@ -22,20 +25,28 @@ export function OfflineCapture({ accountId }: { accountId: string }) {
   const key = accountId;
   const initial = read(key);
   const [ledger, setLedger] = useState<Ledger>(initial.ledger);
-  const problem = initial.problem;
+  const [problem, setProblem] = useState(initial.problem);
   const [title, setTitle] = useState("");
+  const [passphrase, setPassphrase] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const notes = listRecords(ledger, key);
   const held = ledger.held.filter((action) => action.accountId === key);
 
-  function save(next: Ledger) {
-    const stored = commitAccount(window.localStorage, key, next);
+  async function save(next: Ledger) {
+    const stored = passphrase.trim()
+      ? await commitSealed(window.localStorage, key, next, passphrase.trim())
+      : commitAccount(window.localStorage, key, next);
     if (!stored.ok) {
-      setNotice("This device store is full. The note was not saved.");
+      setNotice(stored.reason === "account"
+        ? "That note belongs to another account and was not saved."
+        : stored.reason === "full"
+          ? "This device store is full. The note was not saved."
+          : "Set a passphrase before sealing this store.");
       return;
     }
     setLedger(next);
-    setNotice(null);
+    setProblem(null);
+    setNotice(passphrase.trim() ? null : "Saved on this device without encryption.");
   }
 
   return (
@@ -48,12 +59,39 @@ export function OfflineCapture({ accountId }: { accountId: string }) {
         <span className="quiet-meta">{notes.length} LOCAL</span>
       </div>
       <p className="section-description">
-        These notes stay on this device and survive a reload. They are not the server mission, chat, or AI. A publish stays held until a person approves it. Reconnect does not send it.
+        These notes stay on this device and survive a reload. They are not the server mission, chat, or AI. Without a passphrase they are not encrypted. A publish stays held until a person approves it. Reconnect does not send it.
       </p>
       {problem && (
         <p className="offline-banner" role="alert">
-          The local store was rejected ({problem}). Nothing was overwritten.
+          {problem === "sealed"
+            ? "These notes are encrypted. Enter the passphrase to open them. Nothing was overwritten."
+            : `The local store was rejected (${problem}). Nothing was overwritten.`}
         </p>
+      )}
+      {problem === "sealed" && (
+        <button
+          type="button"
+          className="button button--secondary"
+          onClick={() => {
+            const raw = window.localStorage.getItem(`berta.offline.v1.${encodeURIComponent(key)}`);
+            if (!raw || !passphrase.trim()) {
+              setNotice("Enter the passphrase for this device.");
+              return;
+            }
+            void openLedger(raw, passphrase.trim()).then((json) => {
+              const restored = restoreLedger(json);
+              if (!restored.ok) {
+                setNotice("The decrypted store could not be read.");
+                return;
+              }
+              setLedger(restored.ledger);
+              setProblem(null);
+              setNotice(null);
+            }).catch(() => setNotice("That passphrase did not open the store."));
+          }}
+        >
+          Open encrypted notes
+        </button>
       )}
       {notice && <p className="offline-banner" role="status">{notice}</p>}
       <div className="task-list">
@@ -97,6 +135,15 @@ export function OfflineCapture({ accountId }: { accountId: string }) {
           setTitle("");
         }}
       >
+        <label htmlFor="offline-passphrase" className="sr-only">Device passphrase</label>
+        <input
+          id="offline-passphrase"
+          type="password"
+          value={passphrase}
+          onChange={(event) => setPassphrase(event.target.value)}
+          placeholder="Passphrase to encrypt notes on this device"
+          autoComplete="new-password"
+        />
         <label htmlFor="offline-note" className="sr-only">New offline note</label>
         <input
           id="offline-note"
@@ -138,7 +185,7 @@ export function OfflineCapture({ accountId }: { accountId: string }) {
   );
 }
 
-function read(accountId: string): { ledger: Ledger; problem: null | "corrupt" | "version" } {
+function read(accountId: string): { ledger: Ledger; problem: null | "corrupt" | "version" | "sealed" } {
   if (typeof window === "undefined") return { ledger: loadAccount(memoryFallback(), accountId).ledger, problem: null };
   return loadAccount(window.localStorage, accountId);
 }

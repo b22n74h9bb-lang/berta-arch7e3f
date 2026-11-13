@@ -8,7 +8,8 @@ export const LAST_ACCOUNT_KEY = "berta.offline.lastAccount";
 
 export type RecordStatus = "todo" | "active" | "done" | "blocked";
 export type SyncState = "pending" | "acked" | "conflict" | "held";
-export type ConflictReason = "edit-vs-edit" | "edit-vs-delete" | "stale-revision" | "out-of-order";
+export type ConflictReason = "edit-vs-edit" | "edit-vs-delete" | "stale-revision" | "out-of-order" | "account";
+export const SEALED_PREFIX = "enc:v1:";
 
 export type LocalRecord = {
   id: string;
@@ -165,7 +166,7 @@ export function applyLocal(ledger: Ledger, operation: Operation, byteCap = LEDGE
         outbox: [...ledger.outbox, { operation, state: "pending" as const, attempts: 0 }],
       };
 
-  if (serializeLedger(next).length > byteCap) return { ok: false, ledger, reason: "full" };
+  if (byteLength(serializeLedger(next)) > byteCap) return { ok: false, ledger, reason: "full" };
   return { ok: true, ledger: next, duplicate: false };
 }
 
@@ -192,25 +193,18 @@ export function markRetry(ledger: Ledger, operationId: string): Ledger {
 export function receiveRemote(ledger: Ledger, remote: LocalRecord): { ledger: Ledger; outcome: "adopted" | "ignored-stale" | "conflict" } {
   const local = ledger.records.find((record) => record.id === remote.id);
   if (local && local.accountId !== remote.accountId) {
-    return { ledger, outcome: "conflict" };
-  }
-  const pending = ledger.outbox.some((entry) => entry.operation.recordId === remote.id && entry.state === "pending");
-  if (pending && local) {
-    const changed = local.title !== remote.title || local.body !== remote.body || local.deleted !== remote.deleted;
-    if (!changed && remote.revision <= local.revision) return { ledger, outcome: "ignored-stale" };
-    const reason: ConflictReason = remote.deleted ? "edit-vs-delete" : "edit-vs-edit";
-    return {
-      ledger: {
-        ...ledger,
-        conflicts: ledger.conflicts.some((conflict) => conflict.recordId === remote.id && conflict.reason === reason)
-          ? ledger.conflicts
-          : [...ledger.conflicts, { recordId: remote.id, operationId: remote.id, accountId: remote.accountId, reason }],
-      },
-      outcome: "conflict",
-    };
+    return { ledger: addConflict(ledger, remote, "account"), outcome: "conflict" };
   }
   if (local && remote.revision < local.revision) return { ledger, outcome: "ignored-stale" };
   if (local && remote.revision === local.revision) return { ledger, outcome: "ignored-stale" };
+  const pending = ledger.outbox.some((entry) => entry.operation.recordId === remote.id && entry.state === "pending");
+  if (local && (pending || remote.revision > local.revision)) {
+    const changed = local.title !== remote.title || local.body !== remote.body || local.status !== remote.status || local.deleted !== remote.deleted;
+    if (changed) {
+      const reason: ConflictReason = remote.deleted || local.deleted ? "edit-vs-delete" : "edit-vs-edit";
+      return { ledger: addConflict(ledger, remote, reason), outcome: "conflict" };
+    }
+  }
   const records = local
     ? ledger.records.map((record) => record.id === remote.id ? remote : record)
     : [...ledger.records, remote];
@@ -221,7 +215,7 @@ export function holdAction(ledger: Ledger, action: HeldAction, byteCap = LEDGER_
   if (!action.id || !action.accountId || !action.payload.trim()) return { ok: false, ledger, reason: "invalid" };
   if (ledger.held.some((held) => held.id === action.id)) return { ok: true, ledger, duplicate: true };
   const next: Ledger = { ...ledger, held: [...ledger.held, { ...action, state: "held" }] };
-  if (serializeLedger(next).length > byteCap) return { ok: false, ledger, reason: "full" };
+  if (byteLength(serializeLedger(next)) > byteCap) return { ok: false, ledger, reason: "full" };
   return { ok: true, ledger: next, duplicate: false };
 }
 
@@ -243,7 +237,7 @@ export function exportAccount(ledger: Ledger, accountId: string): Ledger {
   };
 }
 
-export function loadAccount(store: Store, accountId: string): { ledger: Ledger; problem: null | "corrupt" | "version" } {
+export function loadAccount(store: Store, accountId: string): { ledger: Ledger; problem: null | "corrupt" | "version" | "sealed" } {
   let raw: string | null;
   try {
     raw = store.getItem(storageKey(accountId));
@@ -251,16 +245,62 @@ export function loadAccount(store: Store, accountId: string): { ledger: Ledger; 
     return { ledger: emptyLedger(), problem: "corrupt" };
   }
   if (raw == null || raw === "") return { ledger: emptyLedger(), problem: null };
+  if (raw.startsWith(SEALED_PREFIX)) return { ledger: emptyLedger(), problem: "sealed" };
   const restored = restoreLedger(raw);
   if (!restored.ok) return { ledger: emptyLedger(), problem: restored.reason };
   return { ledger: restored.ledger, problem: null };
 }
 
-export function commitAccount(store: Store, accountId: string, ledger: Ledger): { ok: true } | { ok: false; reason: "full" } {
+export function commitAccount(store: Store, accountId: string, ledger: Ledger): { ok: true } | { ok: false; reason: "full" | "account" } {
+  if (ledgerHasForeign(ledger, accountId)) return { ok: false, reason: "account" };
   const raw = serializeLedger(ledger);
-  if (raw.length > LEDGER_BYTE_CAP) return { ok: false, reason: "full" };
+  if (byteLength(raw) > LEDGER_BYTE_CAP) return { ok: false, reason: "full" };
   try {
     store.setItem(storageKey(accountId), raw);
+  } catch {
+    return { ok: false, reason: "full" };
+  }
+  return { ok: true };
+}
+
+export async function sealLedger(json: string, passphrase: string, iterations = 20_000): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKey(passphrase, salt, iterations);
+  const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(json)));
+  const packed = new Uint8Array(salt.length + iv.length + cipher.length);
+  packed.set(salt, 0);
+  packed.set(iv, salt.length);
+  packed.set(cipher, salt.length + iv.length);
+  return `${SEALED_PREFIX}${iterations}:${bytesToB64(packed)}`;
+}
+
+export async function openLedger(payload: string, passphrase: string): Promise<string> {
+  if (!payload.startsWith(SEALED_PREFIX)) throw new Error("not sealed");
+  const body = payload.slice(SEALED_PREFIX.length);
+  const split = body.indexOf(":");
+  const iterations = Number(body.slice(0, split));
+  const packed = b64ToBytes(body.slice(split + 1));
+  if (!Number.isInteger(iterations) || iterations < 1 || packed.length < 29) throw new Error("corrupt");
+  const salt = packed.slice(0, 16);
+  const iv = packed.slice(16, 28);
+  const cipher = packed.slice(28);
+  const key = await deriveKey(passphrase, salt, iterations);
+  try {
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, cipher);
+    return new TextDecoder().decode(plain);
+  } catch {
+    throw new Error("passphrase");
+  }
+}
+
+export async function commitSealed(store: Store, accountId: string, ledger: Ledger, passphrase: string, iterations = 20_000): Promise<{ ok: true } | { ok: false; reason: "full" | "account" | "invalid" }> {
+  if (!passphrase.trim()) return { ok: false, reason: "invalid" };
+  if (ledgerHasForeign(ledger, accountId)) return { ok: false, reason: "account" };
+  const sealed = await sealLedger(serializeLedger(ledger), passphrase, iterations);
+  if (byteLength(sealed) > LEDGER_BYTE_CAP) return { ok: false, reason: "full" };
+  try {
+    store.setItem(storageKey(accountId), sealed);
   } catch {
     return { ok: false, reason: "full" };
   }
@@ -291,6 +331,56 @@ export function clearLastAccount(store: Store): void {
   } catch {
     /* Logout still proceeds. The account key remains unread without this pointer. */
   }
+}
+
+function byteLength(value: string): number {
+  return new TextEncoder().encode(value).length;
+}
+
+function ledgerHasForeign(ledger: Ledger, accountId: string): boolean {
+  return ledger.records.some((record) => record.accountId !== accountId)
+    || ledger.outbox.some((entry) => entry.operation.accountId !== accountId)
+    || ledger.held.some((action) => action.accountId !== accountId)
+    || ledger.conflicts.some((conflict) => conflict.accountId !== accountId)
+    || ledger.acked.some((ack) => ack.accountId !== accountId);
+}
+
+function addConflict(ledger: Ledger, remote: LocalRecord, reason: ConflictReason): Ledger {
+  if (ledger.conflicts.some((conflict) => conflict.recordId === remote.id && conflict.reason === reason)) return ledger;
+  return {
+    ...ledger,
+    conflicts: [...ledger.conflicts, { recordId: remote.id, operationId: remote.id, accountId: remote.accountId, reason }],
+  };
+}
+
+function copyBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(copy).set(bytes);
+  return copy;
+}
+
+async function deriveKey(passphrase: string, salt: Uint8Array, iterations: number) {
+  const material = await crypto.subtle.importKey("raw", new TextEncoder().encode(passphrase), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt: copyBuffer(salt), iterations, hash: "SHA-256" },
+    material,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"],
+  );
+}
+
+function bytesToB64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function b64ToBytes(value: string): Uint8Array {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
 }
 
 function upsertRecord(records: LocalRecord[], operation: Operation): LocalRecord[] {

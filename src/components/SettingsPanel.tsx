@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { CharterPanel } from "@/components/CharterPanel";
 import { MembersPanel } from "@/components/MembersPanel";
+import { PluginsPanel } from "@/components/PluginsPanel";
 import { trpc } from "@/providers/trpc";
 import type { BertaData } from "@/types/berta";
 
@@ -118,7 +119,12 @@ export function SettingsPanel({ data }: { data: BertaData }) {
         </ul>
         <a className="text-link" href="https://www.kimi.ai/help/kimi-claw/overview" target="_blank" rel="noreferrer">Official Kimi Claw overview <ExternalLink size={14} /></a>
       </section>
-      {user?.role === "admin" && <MembersPanel />}
+      {user?.role === "admin" && (
+        <>
+          <MembersPanel />
+          <PluginsPanel />
+        </>
+      )}
       <button type="button" className="button button--secondary signout-button" onClick={logout}><LogOut size={16} /> Sign out</button>
     </div>
   );

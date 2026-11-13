@@ -417,3 +417,8 @@
 .member-row h3 { margin: 0; font-size: 15px; }
 .member-status { display: block; margin-top: 4px; color: var(--text-tertiary); font: 600 10px/1.4 "JetBrains Mono", monospace; letter-spacing: .08em; text-transform: uppercase; }
 .member-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.plugin-scopes { margin: 0; padding: 10px 12px; border: 1px solid var(--surface-border); border-radius: 8px; display: grid; gap: 8px; }
+.plugin-scopes legend { padding: 0 4px; color: var(--text-secondary); font: 500 12px/1.5 "JetBrains Mono", monospace; }
+.plugin-scope-option { display: flex; align-items: center; gap: 8px; color: var(--text-primary); font-size: 13px; }
+.plugin-token-once { margin-top: 12px; padding: 12px; border: 1px dashed var(--surface-border); border-radius: 8px; display: grid; gap: 8px; }
+.plugin-token-once code { word-break: break-all; font: 600 12px/1.5 "JetBrains Mono", monospace; }

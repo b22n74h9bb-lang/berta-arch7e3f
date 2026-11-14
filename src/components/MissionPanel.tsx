@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Check, ChevronRight, Plus, Rabbit, Save } from "lucide-react";
 import { toast } from "sonner";
+import { OfflineCapture } from "@/components/OfflineCapture";
 import { trpc } from "@/providers/trpc";
 import type { BertaData, MissionTask } from "@/types/berta";
 
@@ -11,7 +12,7 @@ const statusLabels: Record<MissionTask["status"], string> = {
   blocked: "Blocked",
 };
 
-export function MissionPanel({ data }: { data: BertaData }) {
+export function MissionPanel({ data, accountId }: { data: BertaData; accountId: string }) {
   const { mission, tasks } = data;
   const [objective, setObjective] = useState(mission.objective);
   const [newTask, setNewTask] = useState("");
@@ -158,6 +159,7 @@ export function MissionPanel({ data }: { data: BertaData }) {
           </button>
         </form>
       </section>
+      <OfflineCapture key={accountId} accountId={accountId} />
     </div>
   );
 }

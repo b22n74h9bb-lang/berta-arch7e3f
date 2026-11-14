@@ -210,6 +210,55 @@ describe("offline continuity ledger", () => {
     expect(later.ledger.conflicts.map((conflict) => conflict.reason)).toContain("edit-vs-edit");
   });
 
+  it("keeps the local note when an equal revision diverges, and ignores an identical copy", () => {
+    const created = applyLocal(emptyLedger(), operation());
+    if (!created.ok) throw new Error("apply failed");
+    const identical = receiveRemote(created.ledger, remote({
+      revision: 1,
+      title: "Capture the offline note",
+      body: "Written on the phone",
+      status: "todo",
+      deleted: false,
+    }));
+    expect(identical.outcome).toBe("ignored-stale");
+    expect(identical.ledger.conflicts).toEqual([]);
+
+    const diverged = receiveRemote(created.ledger, remote({
+      revision: 1,
+      title: "Capture the offline note",
+      body: "A different body at the same revision",
+    }));
+    expect(diverged.outcome).toBe("conflict");
+    expect(diverged.ledger.conflicts.map((conflict) => conflict.reason)).toContain("edit-vs-edit");
+    expect(listRecords(diverged.ledger, "account-a")[0]?.body).toBe("Written on the phone");
+
+    const removed = receiveRemote(created.ledger, remote({
+      revision: 1,
+      title: "Capture the offline note",
+      body: "Written on the phone",
+      deleted: true,
+    }));
+    expect(removed.outcome).toBe("conflict");
+    expect(removed.ledger.conflicts.map((conflict) => conflict.reason)).toContain("edit-vs-delete");
+    expect(listRecords(removed.ledger, "account-a")).toHaveLength(1);
+  });
+
+  it("records a cross-account local edit instead of taking the note", () => {
+    const created = applyLocal(emptyLedger(), operation());
+    if (!created.ok) throw new Error("apply failed");
+    const cross = applyLocal(created.ledger, operation({
+      id: "op-cross",
+      accountId: "account-b",
+      baseRevision: 1,
+      title: "Taken over",
+    }));
+    expect(cross.ok).toBe(true);
+    if (!cross.ok) return;
+    expect(cross.ledger.conflicts[0]?.reason).toBe("account");
+    expect(listRecords(cross.ledger, "account-a")[0]?.title).toBe("Capture the offline note");
+    expect(listRecords(cross.ledger, "account-b")).toEqual([]);
+  });
+
   it("records an account mismatch instead of adopting the other account", () => {
     const created = applyLocal(emptyLedger(), operation());
     if (!created.ok) throw new Error("apply failed");
@@ -249,6 +298,9 @@ describe("offline continuity ledger", () => {
     if (!opened.ok) return;
     expect(listRecords(opened.ledger, "account-a")[0]?.title).toBe("Capture the offline note");
     await expect(openLedger(raw, "wrong passphrase")).rejects.toThrow("passphrase");
+    const plaintext = commitAccount(store, "account-a", created.ledger);
+    expect(plaintext).toEqual({ ok: false, reason: "sealed" });
+    expect(store.data["berta.offline.v1.account-a"]).toBe(raw);
   });
 
   it("rejects a corrupt import and a version mismatch without a partial ledger", () => {

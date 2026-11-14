@@ -145,7 +145,7 @@ export function applyLocal(ledger: Ledger, operation: Operation, byteCap = LEDGE
   const current = ledger.records.find((record) => record.id === operation.recordId);
   let reason: ConflictReason | undefined;
   if (current && current.accountId !== operation.accountId) {
-    reason = "stale-revision";
+    reason = "account";
   } else if (current?.deleted && operation.kind === "upsert") {
     reason = "edit-vs-delete";
   } else if (current && current.revision !== operation.baseRevision) {
@@ -196,7 +196,11 @@ export function receiveRemote(ledger: Ledger, remote: LocalRecord): { ledger: Le
     return { ledger: addConflict(ledger, remote, "account"), outcome: "conflict" };
   }
   if (local && remote.revision < local.revision) return { ledger, outcome: "ignored-stale" };
-  if (local && remote.revision === local.revision) return { ledger, outcome: "ignored-stale" };
+  if (local && remote.revision === local.revision) {
+    if (sameContent(local, remote)) return { ledger, outcome: "ignored-stale" };
+    const reason: ConflictReason = remote.deleted || local.deleted ? "edit-vs-delete" : "edit-vs-edit";
+    return { ledger: addConflict(ledger, remote, reason), outcome: "conflict" };
+  }
   const pending = ledger.outbox.some((entry) => entry.operation.recordId === remote.id && entry.state === "pending");
   if (local && (pending || remote.revision > local.revision)) {
     const changed = local.title !== remote.title || local.body !== remote.body || local.status !== remote.status || local.deleted !== remote.deleted;
@@ -251,8 +255,11 @@ export function loadAccount(store: Store, accountId: string): { ledger: Ledger; 
   return { ledger: restored.ledger, problem: null };
 }
 
-export function commitAccount(store: Store, accountId: string, ledger: Ledger): { ok: true } | { ok: false; reason: "full" | "account" } {
+export function commitAccount(store: Store, accountId: string, ledger: Ledger): { ok: true } | { ok: false; reason: "full" | "account" | "sealed" | "unavailable" } {
   if (ledgerHasForeign(ledger, accountId)) return { ok: false, reason: "account" };
+  const existing = readStored(store, accountId);
+  if (!existing.ok) return { ok: false, reason: "unavailable" };
+  if (existing.raw?.startsWith(SEALED_PREFIX)) return { ok: false, reason: "sealed" };
   const raw = serializeLedger(ledger);
   if (byteLength(raw) > LEDGER_BYTE_CAP) return { ok: false, reason: "full" };
   try {
@@ -330,6 +337,21 @@ export function clearLastAccount(store: Store): void {
     store.removeItem(LAST_ACCOUNT_KEY);
   } catch {
     /* Logout still proceeds. The account key remains unread without this pointer. */
+  }
+}
+
+function sameContent(local: LocalRecord, remote: LocalRecord): boolean {
+  return local.title === remote.title
+    && local.body === remote.body
+    && local.status === remote.status
+    && local.deleted === remote.deleted;
+}
+
+function readStored(store: Store, accountId: string): { ok: true; raw: string | null } | { ok: false } {
+  try {
+    return { ok: true, raw: store.getItem(storageKey(accountId)) };
+  } catch {
+    return { ok: false };
   }
 }
 

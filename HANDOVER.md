@@ -192,7 +192,7 @@ bash scripts/probe-bertapp.sh app.bertapp.life
 
 | Item | Status |
 |------|--------|
-| Live URL TLS / upstream | Green as of 2026-11-11 (probe `https://app.bertapp.life/api/health` → ok). Historical §5 probe kept for cutover diagnosis. |
+| Live URL TLS / upstream | Green as of 2026-11-14 13:40 Asia/Shanghai. `https://app.bertapp.life/` → 200, `/api/health` → `ok` with `db: up` via Caddy, GitHub sign-in → 302 to GitHub. Historical §5 probe kept for cutover diagnosis. |
 | GitHub Copilot in Slack | Returns "isn't authorized to use that resource" — org/account link, not app code |
 | Sandbox executor | Not connected by design |
 | Chat read-only task state | Post-deploy spec |
@@ -200,7 +200,7 @@ bash scripts/probe-bertapp.sh app.bertapp.life
 | Bridge webhook persistence | `POST /api/webhooks/github` verifies HMAC and fails closed without `GITHUB_WEBHOOK_SECRET`; event rows not written until owner-approved follow-up |
 | Hooks / Clawbot plugins | Schema scaffold only (`plugins`, `plugin_tokens`); no third-party activation without owner approval |
 | WeChat integration | Planned, owner-gated integration path; remains disabled until the owner explicitly approves activation and credentials are configured on the host only. |
-| PR #13 offline note ledger | Merged to `main`, but do **not** deploy it until its stated privacy, account-isolation, conflict-resolution, and sync review passes. |
+| PR #13 offline note ledger | Not mounted in the app, so deploying `main` does not turn it on. Equal-revision divergence and a cross-account local edit stay conflicts and keep the local note. A plaintext save cannot replace a sealed ledger. Do not mount `OfflineCapture` until logout/revocation, payload validation, and an iPhone airplane-mode check are done. There is still no server sync. |
 | Backup / restore drill | Non-prod runbook: `deploy/RESTORE.md` + `scripts/restore-drill.sh`. Production dump needs Bandwagon MySQL access. |
 | `MISSION.md` / this file | Added so Berta can run solo |
 

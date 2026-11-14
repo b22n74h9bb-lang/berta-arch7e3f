@@ -199,19 +199,25 @@ bash scripts/probe-bertapp.sh app.bertapp.life
 | Shared assignment model | Post-deploy spec |
 | Bridge webhook persistence | `POST /api/webhooks/github` verifies HMAC and fails closed without `GITHUB_WEBHOOK_SECRET`; event rows not written until owner-approved follow-up |
 | Hooks / Clawbot plugins | Schema scaffold only (`plugins`, `plugin_tokens`); no third-party activation without owner approval |
+| WeChat integration | Planned, owner-gated integration path; remains disabled until the owner explicitly approves activation and credentials are configured on the host only. |
+| PR #13 offline note ledger | Merged to `main`, but do **not** deploy it until its stated privacy, account-isolation, conflict-resolution, and sync review passes. |
 | Backup / restore drill | Non-prod runbook: `deploy/RESTORE.md` + `scripts/restore-drill.sh`. Production dump needs Bandwagon MySQL access. |
 | `MISSION.md` / this file | Added so Berta can run solo |
 
----
+## 7. Owner-gated integrations
 
-## 7. Coordination rules for operators
+Third-party Clawbot plugins and WeChat remain **disabled by default**. The database schema provides scaffolding (`plugins`, `plugin_tokens`), but no third-party plugin may be activated, and no WeChat channel may be enabled, without explicit owner approval.
+
+When enabled, credentials and runtime configuration must remain host-only. Never place tokens, app secrets, webhook secrets, or account identifiers in Git, Slack, or a PR.
+
+## 8. Coordination rules for operators
 
 - Propose in Slack; Berta ratifies.
 - No secrets in Slack or git.
 - After each infra change: ping Berta with evidence (URL screenshot, webhook delivery id, sign-in proof).
 - Re-probe `https://app.bertapp.life` after DNS/SSL/app restart before claiming green.
 
-## 8. Quick file map
+## 9. Quick file map
 
 - `MISSION.md` — purpose / layers / rules
 - `README.md` — developer overview

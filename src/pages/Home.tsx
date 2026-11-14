@@ -1,15 +1,13 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Container, ListTodo, MessageCircle, Rabbit, RefreshCw, Settings } from "lucide-react";
 import { LOGIN_PATH } from "@/const";
 import { useAuth } from "@/hooks/useAuth";
-import { clearLastAccount, readLastAccount, writeLastAccount } from "@/offline/continuity";
 import { trpc } from "@/providers/trpc";
 import type { BertaData } from "@/types/berta";
 import { AccessHold } from "@/components/AccessHold";
 import { BertaMark } from "@/components/BertaMark";
 import { ChatPanel } from "@/components/ChatPanel";
 import { MissionPanel } from "@/components/MissionPanel";
-import { OfflineCapture } from "@/components/OfflineCapture";
 import { SandboxPanel } from "@/components/SandboxPanel";
 import { SettingsPanel } from "@/components/SettingsPanel";
 
@@ -23,7 +21,7 @@ type View = (typeof views)[number]["id"];
 
 export default function Home() {
   const [view, setView] = useState<View>("console");
-  const { user, isLoading: authLoading, error: authError, refresh } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const approved = Boolean(user && (user.verifiedOwner || user.membership.status === "approved"));
   const query = trpc.berta.bootstrap.useQuery(undefined, {
     enabled: Boolean(approved),
@@ -36,47 +34,33 @@ export default function Home() {
     retry: false,
   });
   const accessRequests = memberQueue.data?.filter((member) => member.status === "pending").length ?? 0;
-  useEffect(() => {
-    if (user?.id == null) return;
-    if (approved) writeLastAccount(window.localStorage, String(user.id));
-    else clearLastAccount(window.localStorage);
-  }, [approved, user?.id]);
-  useEffect(() => {
-    if (isUnauthorized(authError) || isUnauthorized(query.error)) clearLastAccount(window.localStorage);
-  }, [authError, query.error]);
   const navigate = (next: View) => {
     setView(next);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   if (authLoading) return <LoadingShell label="AUTHENTICATING OPERATOR" />;
-  const remembered = readLastAccount(window.localStorage);
-  const offlineAccount = approved && user?.id != null
-    ? String(user.id)
-    : !user && !isUnauthorized(authError) && authError && remembered
-      ? remembered
-      : null;
-  if (!user && !offlineAccount) return <Welcome />;
-  if (user && !user.verifiedOwner && user.membership.status !== "approved") {
+  if (!user) return <Welcome />;
+  if (!user.verifiedOwner && user.membership.status !== "approved") {
     const status = user.membership.status === "rejected" || user.membership.status === "revoked"
       ? user.membership.status
       : "pending";
     return <AccessHold login={user.membership.login} status={status} />;
   }
   if (query.isLoading) return <LoadingShell label="LOADING ARCH7E3F MISSION STATE" />;
-  if (query.isError && isUnauthorized(query.error)) return <Welcome />;
-  if ((query.isError || !query.data) && offlineAccount) {
+  if (query.isError && query.error.data?.code === "UNAUTHORIZED") return <Welcome />;
+  if (query.isError || !query.data) {
     return (
-      <OfflineShell
-        accountId={offlineAccount}
-        detail={query.error?.message || authError?.message || "The server could not be reached."}
-        onRetry={() => {
-          void refresh();
-          void query.refetch();
-        }}
-      />
+      <div className="centered-state">
+        <BertaMark size={62} active={false} />
+        <span className="micro-label">CONNECTION INTERRUPTED</span>
+        <h1>Mission state could not load</h1>
+        <p>{query.error?.message || "The backend returned no mission data."}</p>
+        <button type="button" className="button button--primary" onClick={() => void query.refetch()}>
+          <RefreshCw size={16} /> Retry
+        </button>
+      </div>
     );
   }
-  if (query.isError || !query.data || !user) return <Welcome />;
   const data = query.data;
   const pending = data.approvals.filter((approval) => approval.status === "pending").length;
   return (
@@ -125,7 +109,7 @@ export default function Home() {
             <ContextRail data={data} onNavigate={navigate} />
           </div>
         )}
-        {view === "mission" && <MissionPanel data={data} accountId={String(user.id)} />}
+        {view === "mission" && <MissionPanel data={data} />}
         {view === "sandbox" && <SandboxPanel data={data} />}
         {view === "settings" && <SettingsPanel data={data} />}
       </main>
@@ -172,36 +156,6 @@ function ContextRail({ data, onNavigate }: { data: BertaData; onNavigate: (view:
       <p className="context-note">Execution remains paused until a real isolated executor is connected.</p>
     </aside>
   );
-}
-
-function OfflineShell({ accountId, detail, onRetry }: { accountId: string; detail: string; onRetry: () => void }) {
-  return (
-    <div className="app-shell">
-      <header className="topbar">
-        <div className="brand-button">
-          <BertaMark size={37} active={false} />
-          <span><strong>BERTA</strong><small>OFFLINE</small></span>
-        </div>
-      </header>
-      <main className="main-content">
-        <div className="page-stack">
-          <section className="data-section">
-            <span className="micro-label">CONNECTION INTERRUPTED</span>
-            <h2>Server mission state is unavailable</h2>
-            <p className="offline-banner">{detail.replace(/[.!?]$/, "")}. Notes on this device are still here. AI, chat, and server tasks stay unavailable. Revocation cannot be checked until the server answers.</p>
-            <button type="button" className="button button--primary" onClick={onRetry}>
-              <RefreshCw size={16} /> Retry
-            </button>
-          </section>
-          <OfflineCapture accountId={accountId} />
-        </div>
-      </main>
-    </div>
-  );
-}
-
-function isUnauthorized(error: unknown): boolean {
-  return Boolean(error && typeof error === "object" && "data" in error && (error as { data?: { code?: string } }).data?.code === "UNAUTHORIZED");
 }
 
 function LoadingShell({ label }: { label: string }) {

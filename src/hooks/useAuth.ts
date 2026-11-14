@@ -1,4 +1,3 @@
-import { clearLastAccount } from "@/offline/continuity";
 import { trpc } from "@/providers/trpc";
 import { useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
@@ -21,7 +20,6 @@ export function useAuth(options?: UseAuthOptions) {
   const sessionDead = (error as { data?: { code?: string } } | null)?.data?.code === "UNAUTHORIZED";
   const logoutMutation = trpc.auth.logout.useMutation({
     onSuccess: async () => {
-      clearLastAccount(window.localStorage);
       await utils.invalidate();
       navigate(redirectPath);
     },

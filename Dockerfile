@@ -16,6 +16,9 @@ RUN npm run build
 
 FROM node:22-alpine
 WORKDIR /app
+ARG VCS_REF=unknown
+LABEL org.opencontainers.image.revision=$VCS_REF
+LABEL org.opencontainers.image.source="https://github.com/b22n74h9bb-lang/berta-arch7e3f"
 ENV NODE_ENV=production
 COPY package.json ./
 COPY --from=build /app/dist ./dist

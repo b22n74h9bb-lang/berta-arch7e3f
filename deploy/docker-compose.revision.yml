@@ -1,0 +1,7 @@
+# Opt-in release metadata; use together with docker-compose.yml.
+services:
+  app:
+    image: berta-arch7e3f:${VCS_REF:?use scripts/build-release.sh or export a verified full SHA}
+    build:
+      args:
+        VCS_REF: ${VCS_REF:?verified full SHA required}

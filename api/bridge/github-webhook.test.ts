@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("github webhook route", () => {
   beforeEach(() => {
@@ -11,6 +11,12 @@ describe("github webhook route", () => {
     process.env.GITHUB_CLIENT_ID = "Iv1.test";
     process.env.GITHUB_CLIENT_SECRET = "test-client-secret";
     delete process.env.GITHUB_WEBHOOK_SECRET;
+    delete process.env.SLACK_WEBHOOK_URL;
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.SLACK_WEBHOOK_URL;
   });
 
   it("fails closed when the webhook secret is missing", async () => {
@@ -67,5 +73,30 @@ describe("github webhook route", () => {
       deliveryId: "d-1",
     });
     expect(JSON.stringify(body)).not.toContain("whsec-test");
+  });
+
+  it("still accepts when Slack is configured but persistence is unavailable", async () => {
+    process.env.GITHUB_WEBHOOK_SECRET = "whsec-test";
+    process.env.SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/TEST/WEBHOOK/secret-token";
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const { default: app } = await import("../boot");
+    const rawBody = '{"action":"opened","sender":{"login":"ada"},"repository":{"full_name":"org/repo"},"ref":"refs/heads/main"}';
+    const signature = `sha256=${createHmac("sha256", "whsec-test").update(rawBody).digest("hex")}`;
+    const ok = await app.request("http://localhost/api/webhooks/github", {
+      method: "POST",
+      body: rawBody,
+      headers: {
+        "content-type": "application/json",
+        "x-hub-signature-256": signature,
+        "x-github-delivery": "d-2",
+        "x-github-event": "push",
+      },
+    });
+    expect(ok.status).toBe(202);
+    const body = await ok.json() as { accepted: boolean; persisted: boolean };
+    expect(body).toMatchObject({ accepted: true, persisted: false });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(JSON.stringify(body)).not.toContain("secret-token");
   });
 });

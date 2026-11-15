@@ -5,6 +5,7 @@ import { env } from "../lib/env";
 import { log } from "../lib/logger";
 import { getDb } from "../queries/connection";
 import { githubSignatureValid, normalizeGithubDelivery } from "./security";
+import { notifySlackOfNewDelivery } from "./slack-delivery-alert";
 
 function readSummary(body: unknown, eventType: string, repo: string | null, ref: string | null): string {
   const record = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
@@ -23,7 +24,7 @@ function readSummary(body: unknown, eventType: string, repo: string | null, ref:
 async function persistDelivery(event: {
   type: string; deliveryId: string; payloadHash: string;
   actorLogin: string | null; repo: string | null; ref: string | null;
-}, body: unknown): Promise<{ persisted: boolean; missionRecordId?: number }> {
+}, body: unknown): Promise<{ persisted: boolean; created: boolean; missionRecordId?: number }> {
   try {
     const db = getDb();
     await db.insert(bridgeEvents).values({
@@ -35,10 +36,10 @@ async function persistDelivery(event: {
       and(eq(bridgeEvents.deliveryId, event.deliveryId), eq(bridgeEvents.payloadHash, event.payloadHash)),
     ).limit(1);
     const bridgeRow = rows[0];
-    if (!bridgeRow) return { persisted: false };
+    if (!bridgeRow) return { persisted: false, created: false };
     const existing = await db.select().from(missionRecords)
       .where(eq(missionRecords.sourceEventId, bridgeRow.id)).limit(1);
-    if (existing.length > 0) return { persisted: true, missionRecordId: existing[0].id };
+    if (existing.length > 0) return { persisted: true, created: false, missionRecordId: existing[0].id };
     const inserted = await db.insert(missionRecords).values({
       kind: `github.${event.type}`.slice(0, 80),
       summary: readSummary(body, event.type, event.repo, event.ref),
@@ -46,10 +47,10 @@ async function persistDelivery(event: {
       state: "open", sourceEventId: bridgeRow.id,
     });
     const missionRecordId = Number(inserted[0]?.insertId ?? 0) || undefined;
-    return { persisted: true, missionRecordId };
+    return { persisted: true, created: true, missionRecordId };
   } catch (error) {
     log.error("github webhook persistence failed", { error: String(error), deliveryId: event.deliveryId });
-    return { persisted: false };
+    return { persisted: false, created: false };
   }
 }
 
@@ -121,6 +122,22 @@ export function createGithubWebhookHandler() {
       repo: event.repo,
     });
     const persisted = await persistDelivery(event, parsed);
+    if (persisted.persisted && persisted.created) {
+      try {
+        await notifySlackOfNewDelivery({
+          eventType: event.type,
+          deliveryId: event.deliveryId,
+          repo: event.repo,
+          ref: event.ref,
+          actorLogin: event.actorLogin,
+          missionRecordId: persisted.missionRecordId,
+          body: parsed,
+          isNewMissionRecord: true,
+        });
+      } catch (error) {
+        log.warn("slack delivery alert failed", { error: String(error), deliveryId: event.deliveryId });
+      }
+    }
     return c.json({
       ok: true,
       accepted: true,

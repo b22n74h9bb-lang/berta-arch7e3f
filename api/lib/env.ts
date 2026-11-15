@@ -22,4 +22,8 @@ export const env = {
   get githubWebhookSecret() {
     return (process.env.GITHUB_WEBHOOK_SECRET ?? "").trim();
   },
+  /** Incoming Slack webhook. Prefer reading live via slackWebhookUrl. Never log the value. */
+  get slackWebhookUrl() {
+    return (process.env.SLACK_WEBHOOK_URL ?? "").trim();
+  },
 };

@@ -79,10 +79,11 @@ describe("notifySlackOfNewDelivery", () => {
       notified: true,
     });
     expect(poster).toHaveBeenCalledTimes(1);
-    const [url, init] = poster.mock.calls[0];
+    const call = poster.mock.calls[0] as unknown as [string, RequestInit];
+    const [url, init] = call;
     expect(url).toBe("https://hooks.slack.com/services/TEST/WEBHOOK/secret-token");
     expect(init).toMatchObject({ method: "POST" });
-    const body = JSON.parse(String(init?.body));
+    const body = JSON.parse(String(init.body));
     expect(body.text).toContain("New GitHub delivery stored: push on org/repo @ refs/heads/main by ada");
     expect(JSON.stringify(body)).not.toContain("secret-token");
   });

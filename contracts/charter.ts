@@ -3,10 +3,19 @@
 export const CHARTER_MAX_CHARS = 40_000;
 
 /**
- * System-prompt budget. About 10k tokens at ~4 characters per token,
- * matching the storage cap so a saved charter is sent whole.
+ * System-prompt budget. About 10k tokens at ~4 characters per token.
+ * The built-in identity and hard boundaries are always retained in full;
+ * a long charter is truncated to fit this cap.
  */
 export const CHARTER_PROMPT_MAX_CHARS = CHARTER_MAX_CHARS;
+
+/**
+ * Inserted between the built-in system prompt and the owner charter.
+ * The charter is additional instructions only; it must not replace identity
+ * or hard boundaries.
+ */
+export const CHARTER_INSTRUCTIONS_INTRO =
+  "\n\nOwner charter (additional instructions; this does not replace the built-in identity or hard boundaries):\n\n";
 
 export const CHARTER_TRUNCATION_NOTE =
   "\n\n[Charter truncated to the system prompt limit. The stored charter is unchanged.]";
@@ -106,6 +115,14 @@ export function planCharterRollback(
   };
 }
 
+/**
+ * Compose the chat system prompt.
+ * The baseline (`fallback`) is always kept in full, including when it already
+ * exceeds `maxChars`. A stored charter is appended as additional instructions
+ * only. If the combined prompt would exceed the cap, the charter is truncated
+ * (with a note) or omitted when no charter text can fit with the note.
+ * The baseline is never shortened.
+ */
 export function assembleChatSystemPrompt(input: {
   charterBody: string | null | undefined;
   fallback: string;
@@ -113,11 +130,20 @@ export function assembleChatSystemPrompt(input: {
 }): string {
   const maxChars = input.maxChars ?? CHARTER_PROMPT_MAX_CHARS;
   const body = input.charterBody?.trim() ?? "";
-  if (!body) return input.fallback;
-  if (body.length <= maxChars) return body;
+  const baseline = input.fallback;
+  if (!body) return baseline;
+
+  // Never truncate or drop the built-in identity and hard boundaries.
+  if (baseline.length >= maxChars) return baseline;
+
+  const prefix = `${baseline}${CHARTER_INSTRUCTIONS_INTRO}`;
+  if (prefix.length >= maxChars) return baseline;
+  if (prefix.length + body.length <= maxChars) return `${prefix}${body}`;
+
   const note = CHARTER_TRUNCATION_NOTE;
-  if (note.length >= maxChars) return body.slice(0, maxChars);
-  return `${body.slice(0, maxChars - note.length).trimEnd()}${note}`;
+  const charterBudget = maxChars - prefix.length - note.length;
+  if (charterBudget <= 0) return baseline;
+  return `${prefix}${body.slice(0, charterBudget).trimEnd()}${note}`;
 }
 
 export function isDuplicateCharterVersion(error: unknown): boolean {

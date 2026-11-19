@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import {
+  CHARTER_INSTRUCTIONS_INTRO,
   CHARTER_MAX_CHARS,
   CHARTER_PROMPT_MAX_CHARS,
   CHARTER_TRUNCATION_NOTE,
@@ -125,41 +126,84 @@ describe("charter versions", () => {
 });
 
 describe("chat system prompt", () => {
-  it("uses the active charter and falls back to the built-in prompt", () => {
+  const composed = (charter: string, fallback = BERTA_SYSTEM) =>
+    `${fallback}${CHARTER_INSTRUCTIONS_INTRO}${charter}`;
+
+  it("keeps the built-in identity and appends a stored charter as instructions", () => {
     expect(resolveChatSystemPrompt(null)).toBe(BERTA_SYSTEM);
     expect(resolveChatSystemPrompt(undefined)).toBe(BERTA_SYSTEM);
     expect(resolveChatSystemPrompt("  \n")).toBe(BERTA_SYSTEM);
     expect(BERTA_SYSTEM).toContain("no individual profiling");
     expect(BERTA_SYSTEM).toContain("Ask before large downloads");
     const charter = "Neutral charter placeholder.";
-    expect(resolveChatSystemPrompt(charter)).toBe(charter);
-    expect(resolveChatSystemPrompt(charter)).not.toContain("ARCH7E3F");
+    const prompt = resolveChatSystemPrompt(charter);
+    expect(prompt).toBe(composed(charter));
+    expect(prompt.startsWith(BERTA_SYSTEM)).toBe(true);
+    expect(prompt).toContain("ARCH7E3F");
+    expect(prompt).toContain("no individual profiling");
+    expect(prompt).toContain(charter);
+    expect(prompt).toContain(CHARTER_INSTRUCTIONS_INTRO.trim());
   });
 
-  it("keeps the system prompt inside the character budget", () => {
-    const exact = "n".repeat(CHARTER_PROMPT_MAX_CHARS);
-    expect(assembleChatSystemPrompt({ charterBody: exact, fallback: "built-in" })).toBe(exact);
+  it("does not let a short owner note replace identity or hard boundaries", () => {
+    const shortNote = "Team note: Ariel should remind the owner about unfinished tasks.";
+    const prompt = resolveChatSystemPrompt(shortNote);
+    expect(prompt).toBe(composed(shortNote));
+    expect(prompt.startsWith(BERTA_SYSTEM)).toBe(true);
+    expect(prompt).toContain("ARCH7E3F");
+    expect(prompt).toContain("no individual profiling");
+    expect(prompt).toContain("Ask before large downloads");
+    expect(prompt).toContain(shortNote);
+    expect(prompt).not.toBe(shortNote);
+  });
+
+  it("keeps the system prompt inside the character budget by truncating only the charter", () => {
+    const exactFit = "n".repeat(CHARTER_PROMPT_MAX_CHARS - "built-in".length - CHARTER_INSTRUCTIONS_INTRO.length);
+    expect(assembleChatSystemPrompt({ charterBody: exactFit, fallback: "built-in" })).toBe(
+      composed(exactFit, "built-in"),
+    );
+
     const over = "n".repeat(CHARTER_PROMPT_MAX_CHARS + 25);
     const prompt = assembleChatSystemPrompt({ charterBody: over, fallback: "built-in" });
     expect(prompt.length).toBeLessThanOrEqual(CHARTER_PROMPT_MAX_CHARS);
+    expect(prompt.startsWith("built-in")).toBe(true);
+    expect(prompt.startsWith(`built-in${CHARTER_INSTRUCTIONS_INTRO}`)).toBe(true);
     expect(prompt.endsWith(CHARTER_TRUNCATION_NOTE)).toBe(true);
-    expect(prompt).not.toContain("built-in");
+    expect(prompt).toContain("n");
+    expect(prompt).not.toContain(over);
 
-    const max = CHARTER_TRUNCATION_NOTE.length + 12;
+    const fallback = "built-in";
+    const prefixLen = fallback.length + CHARTER_INSTRUCTIONS_INTRO.length;
+    const max = prefixLen + CHARTER_TRUNCATION_NOTE.length + 12;
     const fitted = assembleChatSystemPrompt({
       charterBody: "abcdef".repeat(max),
-      fallback: "built-in",
+      fallback,
       maxChars: max,
     });
     expect(fitted.length).toBe(max);
+    expect(fitted.startsWith(fallback)).toBe(true);
     expect(fitted.endsWith(CHARTER_TRUNCATION_NOTE)).toBe(true);
+    expect(fitted.slice(0, fallback.length)).toBe(fallback);
+  });
+
+  it("never shortens the baseline when the cap is already exceeded or too tight", () => {
+    const longFallback = "f".repeat(CHARTER_PROMPT_MAX_CHARS + 20);
+    expect(assembleChatSystemPrompt({ charterBody: " ", fallback: longFallback })).toBe(longFallback);
+    expect(assembleChatSystemPrompt({ charterBody: "charter text", fallback: longFallback })).toBe(longFallback);
     expect(assembleChatSystemPrompt({
       charterBody: "abcdefghij",
       fallback: "built-in",
       maxChars: 4,
-    })).toBe("abcd");
-    const longFallback = "f".repeat(CHARTER_PROMPT_MAX_CHARS + 20);
-    expect(assembleChatSystemPrompt({ charterBody: " ", fallback: longFallback })).toBe(longFallback);
+    })).toBe("built-in");
+
+    const tight = "baseline";
+    const tooTight = tight.length + CHARTER_INSTRUCTIONS_INTRO.length + CHARTER_TRUNCATION_NOTE.length;
+    const longCharter = "c".repeat(CHARTER_TRUNCATION_NOTE.length + 10);
+    expect(assembleChatSystemPrompt({
+      charterBody: longCharter,
+      fallback: tight,
+      maxChars: tooTight,
+    })).toBe(tight);
   });
 
   it("keeps the built-in prompt when charter storage throws, without logging the failure text", async () => {
@@ -172,14 +216,15 @@ describe("chat system prompt", () => {
     expect(JSON.stringify(warn.mock.calls)).not.toContain(marker);
     warn.mockRestore();
 
-    await expect(readChatSystemPrompt(async () => "Neutral charter placeholder.")).resolves.toBe(
-      "Neutral charter placeholder.",
-    );
+    const charter = "Neutral charter placeholder.";
+    await expect(readChatSystemPrompt(async () => charter)).resolves.toBe(composed(charter));
   });
 
   it("is what sendChat uses for the system prompt", () => {
     const source = readFileSync(new URL("../berta-router.ts", import.meta.url), "utf8");
     expect(source).toContain("readChatSystemPrompt");
+    expect(source).toContain("appendChatRequestContext");
+    expect(source).toContain("formatChatMessageForModel");
     expect(source).not.toContain("system: BERTA_SYSTEM");
   });
 });

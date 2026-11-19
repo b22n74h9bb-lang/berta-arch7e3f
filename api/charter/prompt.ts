@@ -6,7 +6,7 @@ export function resolveChatSystemPrompt(charterBody: string | null | undefined):
   return assembleChatSystemPrompt({ charterBody, fallback: BERTA_SYSTEM });
 }
 
-/** Uses the active charter when one is stored. Storage failures keep the built-in prompt. */
+/** Appends the active charter as additional instructions when one is stored. Storage failures keep the built-in prompt. */
 export async function readChatSystemPrompt(
   loadActiveBody: () => Promise<string | null | undefined>,
 ): Promise<string> {

@@ -106,7 +106,7 @@ export function CharterPanel() {
         {activeVersion !== null && <span className="quiet-meta">ACTIVE V{activeVersion}</span>}
       </div>
       <p className="section-description">
-        Paste or upload markdown. Each save stores a new version. Every later chat, including chats from approved members, uses the active version as its system prompt. Until the first save, chats keep the built-in prompt. Keep private notes out of this text.
+        Paste or upload markdown. Each save stores a new version. Every later chat, including chats from approved members, appends the active version as additional instructions after the built-in identity and hard boundaries. The charter does not replace that identity or those boundaries. Until the first save, chats use only the built-in prompt. Keep private notes out of this text.
       </p>
       {state.isLoading && <p className="charter-note">Loading charter…</p>}
       {state.isError && (

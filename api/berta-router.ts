@@ -9,6 +9,7 @@ import { getDb } from "./queries/connection";
 import { ensureMission, getMissionState, ownedApproval, ownedJob, ownedTask } from "./queries/berta";
 import { kimiGw } from "./ai/provider";
 import { readChatSystemPrompt } from "./charter/prompt";
+import { appendChatRequestContext, formatChatMessageForModel } from "./charter/request-context";
 import { latestCharter } from "./queries/charter";
 import {
   generateAndStoreImage,
@@ -268,7 +269,7 @@ export const bertaRouter = createRouter({
   sendChat: approvedQuery
     .input(z.object({ content: z.string().trim().min(1).max(6000) }))
     .mutation(async ({ ctx, input }) => {
-      await ensureMission(ctx.user.id);
+      const mission = await ensureMission(ctx.user.id);
       const db = getDb();
       await db.insert(chatMessages).values({ userId: ctx.user.id, role: "user", content: input.content });
       const history = await db
@@ -280,11 +281,18 @@ export const bertaRouter = createRouter({
       const messages = history
         .reverse()
         .filter((message) => message.role !== "system")
-        .map((message) => ({ role: message.role as "user" | "assistant", content: message.content }));
+        .map((message) => ({
+          role: message.role as "user" | "assistant",
+          content: formatChatMessageForModel(message.createdAt, message.content),
+        }));
 
       try {
         const { defaultModelId } = await listModels();
-        const system = await readChatSystemPrompt(async () => (await latestCharter())?.body);
+        const assembled = await readChatSystemPrompt(async () => (await latestCharter())?.body);
+        const system = appendChatRequestContext(assembled, {
+          now: new Date(),
+          mission: { createdAt: mission.createdAt, code: mission.code, status: mission.status },
+        });
         const result = await generateText({
           model: kimiGw(defaultModelId),
           system,

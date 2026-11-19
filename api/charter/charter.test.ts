@@ -223,6 +223,8 @@ describe("chat system prompt", () => {
   it("is what sendChat uses for the system prompt", () => {
     const source = readFileSync(new URL("../berta-router.ts", import.meta.url), "utf8");
     expect(source).toContain("readChatSystemPrompt");
+    expect(source).toContain("appendChatRequestContext");
+    expect(source).toContain("formatChatMessageForModel");
     expect(source).not.toContain("system: BERTA_SYSTEM");
   });
 });
